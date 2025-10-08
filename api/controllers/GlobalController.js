@@ -3,7 +3,7 @@ class GlobalController {
     this.dao = dao;
   }
 
-  // Obtener todos los registros
+  // Get all records
   getAll = async (req, res) => {
     try {
       const items = await this.dao.getAll();
@@ -20,7 +20,7 @@ class GlobalController {
     }
   };
 
-  // Leer un registro por ID
+  // Read a record by ID
   read = async (req, res) => {
     try {
       const { id } = req.params;
@@ -46,7 +46,7 @@ class GlobalController {
     }
   };
 
-  // Crear nuevo registro
+  // Create new record
   create = async (req, res) => {
     try {
       const newItem = await this.dao.create(req.body);
@@ -64,7 +64,7 @@ class GlobalController {
     }
   };
 
-  // Actualizar registro
+  // Update record
   update = async (req, res) => {
     try {
       const { id } = req.params;
@@ -91,7 +91,7 @@ class GlobalController {
     }
   };
 
-  // Eliminar registro
+  // Delete record
   delete = async (req, res) => {
     try {
       const { id } = req.params;

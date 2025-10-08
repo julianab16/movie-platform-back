@@ -5,7 +5,7 @@ class FavoritesDAO extends GlobalDAO {
     super('favorites');
   }
 
-  // Obtener favoritos de un usuario con información de la película
+  // Get user favorites with movie information
   async getFavoritesByUserId(userId) {
     const { data, error } = await require('../config/supabase').supabase
       .from(this.tableName)
@@ -29,7 +29,7 @@ class FavoritesDAO extends GlobalDAO {
     return data;
   }
 
-  // Verificar si una película es favorita del usuario
+  // Check if a movie is user's favorite
   async isFavorite(userId, movieId) {
     const favorite = await this.findOneBy({
       user_id: userId,
@@ -38,7 +38,7 @@ class FavoritesDAO extends GlobalDAO {
     return !!favorite;
   }
 
-  // Agregar a favoritos
+  // Add to favorites
   async addFavorite(userId, movieId) {
     return await this.create({
       user_id: userId,
@@ -46,7 +46,7 @@ class FavoritesDAO extends GlobalDAO {
     });
   }
 
-  // Remover de favoritos
+  // Remove from favorites
   async removeFavorite(userId, movieId) {
     const { data, error } = await require('../config/supabase').supabase
       .from(this.tableName)

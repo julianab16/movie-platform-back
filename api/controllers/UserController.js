@@ -7,7 +7,7 @@ class UserController extends GlobalController {
     super(UserDAO);
   }
 
-  // GET /users/me - Obtener perfil del usuario autenticado
+  // GET /users/me - Get authenticated user profile
   async getProfile(req, res) {
     try {
       console.log('req.user completo:', req.user); // Debug
@@ -23,7 +23,7 @@ class UserController extends GlobalController {
         });
       }
       
-      const user = await this.dao.findById(userId);
+      const user = await this.dao.getById(userId);
       console.log("Usuario encontrado:", user);
       
       if (!user) {
@@ -55,7 +55,7 @@ class UserController extends GlobalController {
     }
   }
 
-  // PUT /users/me - Actualizar perfil del usuario autenticado
+  // PUT /users/me - Update authenticated user profile
   async updateProfile(req, res) {
     try {
       console.log('=== DEBUG UPDATE PROFILE ===');
@@ -68,7 +68,7 @@ class UserController extends GlobalController {
       const { firstName, lastName, age, email } = req.body;
       console.log('Body recibido:', req.body);
 
-      // Validaciones básicas
+      // Basic validations
       if (!firstName || !lastName || !age || !email) {
         return res.status(400).json({
           success: false,
@@ -76,7 +76,7 @@ class UserController extends GlobalController {
         });
       }
 
-      // Validar edad mínima
+      // Validate minimum age
       if (age < 13) {
         return res.status(400).json({
           success: false,
@@ -84,7 +84,7 @@ class UserController extends GlobalController {
         });
       }
 
-      // Validar formato de email (básico)
+      // Validate email format (basic)
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email)) {
         return res.status(400).json({
@@ -93,7 +93,7 @@ class UserController extends GlobalController {
         });
       }
 
-      // Verificar si el email ya está en uso por otro usuario
+      // Check if email is already in use by another user
       const existingUser = await this.dao.findByEmail(email);
       console.log('Usuario existente con email:', existingUser);
       
@@ -104,7 +104,7 @@ class UserController extends GlobalController {
         });
       }
 
-      // Mapear campos de entrada (inglés) al modelo (español)
+      // Map input fields (English) to model (Spanish)
       const updateData = {
         nombres: firstName,
         apellidos: lastName,
@@ -114,18 +114,18 @@ class UserController extends GlobalController {
       };
       console.log('Datos a actualizar:', updateData);
 
-      const updatedUser = await this.dao.updateById(userId, updateData);
+      const updatedUser = await this.dao.update(userId, updateData);
       console.log('Usuario actualizado:', updatedUser);
 
       if (!updatedUser) {
-        console.log('❌ updateById retornó null/undefined');
+        console.log('❌ update retornó null/undefined');
         return res.status(404).json({
           success: false,
           message: "Usuario no encontrado"
         });
       }
 
-      // Mapear respuesta del modelo (español) a inglés
+      // Map response from model (Spanish) to English
       const response = {
         id: updatedUser._id,
         firstName: updatedUser.nombres,
@@ -150,7 +150,7 @@ class UserController extends GlobalController {
     }
   }
 
-  // DELETE /users/me - Eliminar cuenta del usuario autenticado
+  // DELETE /users/me - Delete authenticated user account
   async deleteAccount(req, res) {
     try {
       console.log('=== DEBUG DELETE ACCOUNT ===');
@@ -164,7 +164,7 @@ class UserController extends GlobalController {
       console.log('Password recibido:', password ? '***' : 'undefined');
       console.log('ConfirmText recibido:', confirmText);
 
-      // Validar que se proporcione la contraseña y confirmación
+      // Validate that password and confirmation are provided
       if (!password || !confirmText) {
         console.log('❌ Faltan password o confirmText');
         return res.status(400).json({
@@ -173,7 +173,7 @@ class UserController extends GlobalController {
         });
       }
 
-      // Validar que el texto de confirmación sea correcto
+      // Validate that confirmation text is correct
       if (confirmText !== "ELIMINAR") {
         console.log('❌ ConfirmText incorrecto:', confirmText);
         return res.status(400).json({
@@ -182,8 +182,8 @@ class UserController extends GlobalController {
         });
       }
 
-      // Obtener usuario para verificar contraseña
-      const user = await this.dao.findById(userId);
+      // Get user to verify password
+      const user = await this.dao.getById(userId);
       console.log('Usuario encontrado:', user ? 'SÍ' : 'NO');
       
       if (!user) {
@@ -194,7 +194,7 @@ class UserController extends GlobalController {
         });
       }
 
-      // Verificar contraseña usando el método del modelo
+      // Verify password using model method
       console.log('Verificando contraseña...');
       const isValidPassword = await user.comparePassword(password);
       console.log('Contraseña válida:', isValidPassword);
@@ -207,9 +207,9 @@ class UserController extends GlobalController {
         });
       }
 
-      // Eliminar usuario
+      // Delete user
       console.log('Eliminando usuario...');
-      const deleteResult = await this.dao.deleteById(userId);
+      const deleteResult = await this.dao.delete(userId);
       console.log('Resultado eliminación:', deleteResult);
 
       console.log('✅ Usuario eliminado exitosamente');

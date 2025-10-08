@@ -6,9 +6,9 @@ class UserDAO extends GlobalDAO {
     super('users');
   }
 
-  // Override create para hashear contraseña
+  // Override create to hash password
   async create(userData) {
-    // Hash password antes de guardar
+    // Hash password before saving
     const hashedPassword = await bcrypt.hash(userData.contrasena, parseInt(process.env.BCRYPT_SALT_ROUNDS) || 12);
     
     const userWithHashedPassword = {
@@ -19,27 +19,17 @@ class UserDAO extends GlobalDAO {
     return await super.create(userWithHashedPassword);
   }
 
-  // Método para buscar usuario por email
+  // Method to find user by email
   async findByEmail(email) {
     return await this.findOneBy({ correo: email });
   }
 
-  // Método para actualizar usuario por ID
-  async updateById(id, updateData) {
-    return await this.update(id, updateData);
-  }
-
-  // Método para eliminar usuario por ID
-  async deleteById(id) {
-    return await this.delete(id);
-  }
-
-  // Método para verificar contraseña
+  // Method to verify password
   async comparePassword(plainPassword, hashedPassword) {
     return await bcrypt.compare(plainPassword, hashedPassword);
   }
 
-  // Método para incrementar intentos de login
+  // Method to increment login attempts
   async incrementLoginAttempts(userId) {
     const user = await this.getById(userId);
     if (!user) throw new Error('Usuario no encontrado');
@@ -52,18 +42,18 @@ class UserDAO extends GlobalDAO {
       login_attempts: newAttempts
     };
 
-    // Si alcanza el máximo, bloquear cuenta
+    // If max attempts reached, lock account
     if (newAttempts >= maxAttempts) {
       updateData.lock_until = new Date(Date.now() + lockTimeMinutes * 60 * 1000);
       updateData.is_locked = true;
     }
 
-    return await this.updateById(userId, updateData);
+    return await this.update(userId, updateData);
   }
 
-  // Método para resetear intentos de login
+  // Method to reset login attempts
   async resetLoginAttempts(userId) {
-    return await this.updateById(userId, {
+    return await this.update(userId, {
       login_attempts: 0,
       lock_until: null,
       is_locked: false,

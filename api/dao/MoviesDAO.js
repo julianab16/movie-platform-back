@@ -5,12 +5,12 @@ class MoviesDAO extends GlobalDAO {
     super('movies');
   }
 
-  // Método para buscar películas por género
+  // Method to find movies by genre
   async findByGenero(genero) {
     return await this.findBy({ genero });
   }
 
-  // Método para buscar películas por nombre (búsqueda parcial)
+  // Method to search movies by name (partial search)
   async searchByNombre(nombre) {
     const { data, error } = await require('../config/supabase').supabase
       .from(this.tableName)

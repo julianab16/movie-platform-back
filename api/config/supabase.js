@@ -8,10 +8,10 @@ if (!supabaseUrl || !supabaseKey) {
   throw new Error('Las variables de entorno de Supabase son requeridas');
 }
 
-// Cliente público (para operaciones normales)
+// Public client (for normal operations)
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Cliente de administración (para operaciones que requieren permisos especiales)
+// Admin client (for operations requiring special permissions)
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
 module.exports = {

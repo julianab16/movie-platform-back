@@ -5,7 +5,7 @@ class GlobalDAO {
     this.tableName = tableName;
   }
 
-  // Obtener todos los registros
+  // Get all records
   async getAll() {
     const { data, error } = await supabase
       .from(this.tableName)
@@ -16,7 +16,7 @@ class GlobalDAO {
     return data;
   }
 
-  // Obtener un registro por ID
+  // Get a record by ID
   async getById(id) {
     const { data, error } = await supabase
       .from(this.tableName)
@@ -28,7 +28,7 @@ class GlobalDAO {
     return data;
   }
 
-  // Crear un nuevo registro
+  // Create a new record
   async create(data) {
     const { data: result, error } = await supabase
       .from(this.tableName)
@@ -40,7 +40,7 @@ class GlobalDAO {
     return result;
   }
 
-  // Actualizar un registro
+  // Update a record
   async update(id, data) {
     const { data: result, error } = await supabase
       .from(this.tableName)
@@ -56,7 +56,7 @@ class GlobalDAO {
     return result;
   }
 
-  // Eliminar un registro
+  // Delete a record
   async delete(id) {
     const { data, error } = await supabase
       .from(this.tableName)
@@ -69,7 +69,7 @@ class GlobalDAO {
     return data;
   }
 
-  // Buscar por criterios específicos
+  // Search by specific criteria
   async findBy(criteria) {
     let query = supabase.from(this.tableName).select('*');
     
@@ -82,7 +82,7 @@ class GlobalDAO {
     return data;
   }
 
-  // Buscar un registro por criterios específicos
+  // Find one record by specific criteria
   async findOneBy(criteria) {
     let query = supabase.from(this.tableName).select('*');
     
