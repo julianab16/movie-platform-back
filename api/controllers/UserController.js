@@ -127,7 +127,7 @@ class UserController extends GlobalController {
 
       // Map response from model (Spanish) to English
       const response = {
-        id: updatedUser._id,
+        id: updatedUser.id,
         firstName: updatedUser.nombres,
         lastName: updatedUser.apellidos,
         age: updatedUser.edad,
