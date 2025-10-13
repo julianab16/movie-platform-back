@@ -1,0 +1,269 @@
+/**
+ * @fileoverview Modelo para tracking de intentos de login usando Supabase.
+ * Proporciona seguridad contra ataques de fuerza bruta.
+ * 
+ * @module models/LoginAttempt
+ * @since 1.0.0
+ */
+
+const { supabase } = require('../config/supabase');
+const logger = require('../utils/logger');
+
+/**
+ * Modelo para gestión de intentos de login por IP
+ */
+class LoginAttempt {
+  constructor(data) {
+    this.ip = data.ip;
+    this.attempts = data.attempts || 0;
+    this.lastAttempt = data.lastAttempt || new Date();
+    this.blockedUntil = data.blockedUntil || null;
+    this.sucessfulLogins = data.sucessfulLogins || 0;
+  }
+
+  /**
+   * Busca intentos de login por IP
+   * @param {Object} query - Query de búsqueda
+   * @returns {Promise<LoginAttempt|null>} Registro de intentos o null
+   */
+  static async findOne(query) {
+    try {
+      if (query.ip) {
+        const { data, error } = await supabase
+          .from('login_attempts')
+          .select('*')
+          .eq('ip', query.ip)
+          .maybeSingle();
+
+        if (error) {
+          logger.error('LOGIN_ATTEMPT', 'Error al buscar intentos por IP', error);
+          return null;
+        }
+
+        return data ? new LoginAttempt({
+          ip: data.ip,
+          attempts: data.attempts,
+          lastAttempt: data.last_attempt,
+          blockedUntil: data.blocked_until,
+          sucessfulLogins: data.successful_logins
+        }) : null;
+      }
+      return null;
+    } catch (error) {
+      logger.error('LOGIN_ATTEMPT', 'Error al buscar intentos por IP', error);
+      return null;
+    }
+  }
+
+  /**
+   * Guarda el registro de intentos
+   * @returns {Promise<LoginAttempt>} Registro guardado
+   */
+  async save() {
+    try {
+      const data = {
+        ip: this.ip,
+        attempts: this.attempts,
+        last_attempt: this.lastAttempt,
+        blocked_until: this.blockedUntil,
+        successful_logins: this.sucessfulLogins
+      };
+      
+      const { error } = await supabase
+        .from('login_attempts')
+        .upsert(data, {
+          onConflict: 'ip',
+          ignoreDuplicates: false
+        });
+
+      if (error) {
+        throw error;
+      }
+
+      logger.debug('LOGIN_ATTEMPT', `Intentos guardados para IP: ${this.ip}`, data);
+      return this;
+    } catch (error) {
+      logger.error('LOGIN_ATTEMPT', 'Error al guardar intentos', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Verifica si la IP está bloqueada
+   * @returns {boolean} True si está bloqueada
+   */
+  isBlocked() {
+    if (!this.blockedUntil) return false;
+    
+    const now = new Date();
+    const isBlocked = now < this.blockedUntil;
+    
+    // Si ya pasó el tiempo de bloqueo, desbloqueamos automáticamente
+    if (!isBlocked && this.blockedUntil) {
+      this.blockedUntil = null;
+      this.attempts = 0;
+      this.save(); // Guardar cambios
+    }
+    
+    return isBlocked;
+  }
+
+  /**
+   * Registra un intento de login fallido
+   * @param {string} ip - IP del cliente
+   * @returns {Promise<LoginAttempt>} Registro actualizado
+   */
+  static async recordFailedAttempt(ip) {
+    try {
+      let attempt = await LoginAttempt.findOne({ ip });
+      
+      if (!attempt) {
+        attempt = new LoginAttempt({ ip });
+      }
+      
+      attempt.attempts = (attempt.attempts || 0) + 1;
+      attempt.lastAttempt = new Date();
+      
+      // Bloquear después de 10 intentos fallidos en 10 minutos
+      if (attempt.attempts >= 10) {
+        attempt.blockedUntil = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
+        logger.warn('SECURITY', `IP bloqueada por intentos fallidos: ${ip}`, {
+          attempts: attempt.attempts,
+          blockedUntil: attempt.blockedUntil
+        });
+      }
+      
+      await attempt.save();
+      return attempt;
+    } catch (error) {
+      logger.error('LOGIN_ATTEMPT', 'Error al registrar intento fallido', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Registra un login exitoso
+   * @param {string} ip - IP del cliente
+   * @returns {Promise<LoginAttempt>} Registro actualizado
+   */
+  static async recordSuccessfulLogin(ip) {
+    try {
+      let attempt = await LoginAttempt.findOne({ ip });
+      
+      if (!attempt) {
+        attempt = new LoginAttempt({ ip });
+      }
+      
+      // Resetear intentos fallidos en login exitoso
+      attempt.attempts = 0;
+      attempt.blockedUntil = null;
+      attempt.sucessfulLogins = (attempt.sucessfulLogins || 0) + 1;
+      attempt.lastAttempt = new Date();
+      
+      await attempt.save();
+      logger.info('LOGIN_ATTEMPT', `Login exitoso desde IP: ${ip}`);
+      return attempt;
+    } catch (error) {
+      logger.error('LOGIN_ATTEMPT', 'Error al registrar login exitoso', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Limpia intentos antiguos (>24 horas)
+   * @returns {Promise<number>} Número de registros eliminados
+   */
+  static async cleanOldAttempts() {
+    try {
+      const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      
+      const { data, error } = await supabase
+        .from('login_attempts')
+        .delete()
+        .lt('last_attempt', dayAgo.toISOString());
+      
+      if (error) {
+        throw error;
+      }
+      
+      const cleaned = data ? data.length : 0;
+      
+      if (cleaned > 0) {
+        logger.info('LOGIN_ATTEMPT', `Limpiados ${cleaned} registros antiguos de intentos`);
+      }
+      
+      return cleaned;
+    } catch (error) {
+      logger.error('LOGIN_ATTEMPT', 'Error al limpiar intentos antiguos', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Obtiene estadísticas de intentos de login
+   * @returns {Promise<Object>} Estadísticas
+   */
+  static async getStats() {
+    try {
+      const { data: allAttempts, error } = await supabase
+        .from('login_attempts')
+        .select('*');
+
+      if (error) {
+        throw error;
+      }
+
+      const totalIPs = allAttempts.length;
+      const now = new Date();
+      
+      const blockedIPs = allAttempts.filter(data => {
+        return data.blocked_until && new Date(data.blocked_until) > now;
+      }).length;
+
+      const totalAttempts = allAttempts.reduce((sum, data) => sum + (data.attempts || 0), 0);
+      const totalSuccessful = allAttempts.reduce((sum, data) => sum + (data.successful_logins || 0), 0);
+
+      return {
+        totalIPs,
+        blockedIPs,
+        activeIPs: totalIPs - blockedIPs,
+        totalAttempts,
+        totalSuccessful,
+        successRate: totalAttempts > 0 ? (totalSuccessful / totalAttempts * 100).toFixed(2) + '%' : '0%'
+      };
+    } catch (error) {
+      logger.error('LOGIN_ATTEMPT', 'Error al obtener estadísticas', error);
+      return {
+        totalIPs: 0,
+        blockedIPs: 0,
+        activeIPs: 0,
+        totalAttempts: 0,
+        totalSuccessful: 0,
+        successRate: '0%'
+      };
+    }
+  }
+
+  /**
+   * Limpia todos los registros (solo para testing)
+   */
+  static async clearAll() {
+    try {
+      const { error } = await supabase
+        .from('login_attempts')
+        .delete()
+        .neq('ip', ''); // Eliminar todos los registros
+
+      if (error) {
+        throw error;
+      }
+
+      logger.warn('LOGIN_ATTEMPT', 'Todos los registros de intentos fueron eliminados');
+    } catch (error) {
+      logger.error('LOGIN_ATTEMPT', 'Error al limpiar todos los registros', error);
+      throw error;
+    }
+  }
+}
+
+module.exports = LoginAttempt;
