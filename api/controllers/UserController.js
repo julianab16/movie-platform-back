@@ -299,6 +299,7 @@ class UserController extends GlobalController {
     res.status(201).json({
       success: true,
       message: "Usuario registrado correctamente",
+      message2: "Por favor verifica tu correo electrónico para activar la cuenta.",
       data: userData[0]
     });
 
@@ -329,6 +330,86 @@ class UserController extends GlobalController {
       });
     }
   }
+
+// POST /api/v1/users/login
+async loginUser(req, res) {
+  try {
+    const { correo, contrasena } = req.body;
+
+    // Validación básica
+    if (!correo || !contrasena) {
+      return res.status(400).json({
+        success: false,
+        message: "Correo y contraseña son requeridos",
+      });
+    }
+
+    // Intentar iniciar sesión en Supabase Auth
+    const { data: authData, error: authError } =
+      await supabase.auth.signInWithPassword({
+        email: correo,
+        password: contrasena,
+      });
+
+
+    console.log("Auth Data:", authData);
+    console.log("correo:", correo);
+    if (authError) {
+      console.error("Error en login:", authError);
+      return res.status(401).json({
+        success: false,
+        message: "Credenciales inválidas o usuario no encontrado",
+      });
+    }
+
+    // Extraer datos del usuario autenticado
+    const user = authData.user;
+
+    // Buscar los datos adicionales del usuario en la tabla `users`
+    const { data: userData, error: userError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("correo", correo)
+      .single();
+
+    if (userError) {
+      console.error("Error al obtener datos del usuario:", userError);
+      return res.status(500).json({
+        success: false,
+        message: "Error al obtener datos adicionales del usuario",
+      });
+    }
+
+    if (!userData) {
+      return res.status(404).json({
+        success: false,
+        message: "Usuario no encontrado en la base de datos",
+      });
+    }
+
+    // Devolver datos del usuario y el token de sesión
+    res.status(200).json({
+      success: true,
+      message: "Inicio de sesión exitoso",
+      user: {
+        id: userData.id,
+        nombres: userData.nombres,
+        apellidos: userData.apellidos,
+        correo: userData.correo,
+        edad: userData.edad,
+      },
+      session: authData.session, // contiene el access_token, refresh_token, etc.
+    });
+
+  } catch (error) {
+    console.error("Error general en loginUser:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+    });
+  }
+}
+
 
 }
 
