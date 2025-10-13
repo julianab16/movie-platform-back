@@ -1,4 +1,4 @@
-const mongoose = require('suabase');
+const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 
