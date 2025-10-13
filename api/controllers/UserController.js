@@ -226,72 +226,96 @@ class UserController extends GlobalController {
 
  // POST /users/register - Registrar nuevo usuario
   async registerUser(req, res) {
-    try {
-      const { nombres, apellidos, edad, correo, password } = req.body;
+  try {
+    const { nombres, apellidos, edad, correo, contrasena } = req.body;
 
-      if (!nombres || !apellidos || !edad || !correo || !password) {
-        return res.status(400).json({
-          success: false,
-          message: "Todos los campos son requeridos"
-        });
-      }
-
-      // Registrar usuario en Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: correo,
-        password,
-      });
-
-      if (authError) {
-        console.error("Error de Supabase Auth:", authError);
-        return res.status(400).json({
-          success: false,
-          message: authError.message
-        });
-      }
-
-      // Guardar datos adicionales en la tabla `users`
-      const { data: userData, error: userError } = await supabase
-        .from("users")
-        .insert([
-          {
-            id_auth: authData.user.id, // Relación con Supabase Auth
-            nombres,
-            apellidos,
-            edad,
-            correo,
-            created_at: new Date()
-          }
-        ])
-        .select();
-
-      if (userError) {
-        console.error("Error al insertar en users:", userError);
-        return res.status(500).json({
-          success: false,
-          message: "No se pudo guardar el usuario en la base de datos"
-        });
-      }
-
-      res.status(201).json({
-        success: true,
-        message: "Usuario registrado correctamente",
-        data: userData[0]
-      });
-
-    } catch (error) {
-      console.error("Error al registrar usuario:", error);
-      res.status(500).json({
+    // Validación básica
+    if (!nombres || !apellidos || !edad || !correo || !contrasena) {
+      return res.status(400).json({
         success: false,
-        message: "Error interno del servidor"
+        message: "Todos los campos son requeridos"
       });
     }
+
+    // Validación de formato de correo
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(correo)) {
+      return res.status(400).json({
+        success: false,
+        message: "Formato de correo inválido"
+      });
+    }
+
+    // Registrar usuario en Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: correo,
+      password: contrasena,
+    });
+
+    if (authError) {
+      console.error("Error de Supabase Auth:", authError);
+      return res.status(400).json({
+        success: false,
+        message: authError.message || "Error al registrar usuario en Supabase Auth"
+      });
+    }
+
+    // ⚠️ Verificar si el usuario fue creado o está pendiente de verificación por correo
+    if (!authData?.user) {
+      console.warn("⚠️ Usuario aún no verificado, Supabase no devolvió user.id");
+      return res.status(202).json({
+        success: true,
+        message: "Registro exitoso. Por favor verifica tu correo electrónico para activar la cuenta."
+      });
+    }
+    const bcrypt = require("bcryptjs");
+    const hashedPassword = await bcrypt.hash(contrasena, 10);
+    // Insertar datos adicionales en la tabla `users`
+    const { data: userData, error: userError } = await supabase
+      .from("users")
+      .insert([
+        {
+         // id_auth: authData.user.id, // ID del usuario en Supabase Auth
+          nombres,
+          apellidos,
+          edad: parseInt(edad),
+          correo,
+          contrasena: hashedPassword,
+          created_at: new Date()
+        }
+      ])
+      .select();
+
+    if (userError) {
+      console.error("Error al insertar en la tabla users:", userError);
+      return res.status(500).json({
+        success: false,
+        message: "No se pudo guardar el usuario en la base de datos",
+        details: userError.message
+      });
+    }
+
+    // Todo salió bien
+    res.status(201).json({
+      success: true,
+      message: "Usuario registrado correctamente",
+      data: userData[0]
+    });
+
+  } catch (error) {
+    console.error("Error inesperado al registrar usuario:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error interno del servidor"
+    });
   }
+}
+
 
   // GET /users - Obtener todos los usuarios
   async getAllUsers(req, res) {
     try {
-      const users = await this.dao.findAll();
+      const users = await this.dao.getAll();
       res.status(200).json({
         success: true,
         count: users.length,
