@@ -222,6 +222,80 @@ class UserController extends GlobalController {
       });
     }
   }
+
+ // POST /users/register - Registrar nuevo usuario
+  async registerUser(req, res) {
+    try {
+      const { nombres, apellidos, edad, correo, password } = req.body;
+
+      // Validar campos obligatorios
+      if (!nombres || !apellidos || !edad || !correo || !password) {
+        return res.status(400).json({
+          success: false,
+          message: "Todos los campos son requeridos"
+        });
+      }
+
+      // Verificar si el correo ya está registrado
+      const existingUser = await this.dao.findByEmail(correo);
+      if (existingUser) {
+        return res.status(409).json({
+          success: false,
+          message: "El correo ya está registrado"
+        });
+      }
+
+      // Encriptar la contraseña
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // Crear usuario
+      const newUser = await this.dao.create({
+        nombres,
+        apellidos,
+        edad,
+        correo,
+        password: hashedPassword,
+        createdAt: new Date()
+      });
+
+      res.status(201).json({
+        success: true,
+        message: "Usuario registrado correctamente",
+        data: {
+          id: newUser._id,
+          nombres: newUser.nombres,
+          apellidos: newUser.apellidos,
+          correo: newUser.correo
+        }
+      });
+
+    } catch (error) {
+      console.error("Error al registrar usuario:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+
+  // GET /users - Obtener todos los usuarios
+  async getAllUsers(req, res) {
+    try {
+      const users = await this.dao.findAll();
+      res.status(200).json({
+        success: true,
+        count: users.length,
+        data: users
+      });
+    } catch (error) {
+      console.error("Error al obtener usuarios:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+
 }
 
 module.exports = new UserController();
