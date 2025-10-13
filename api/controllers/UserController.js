@@ -1,3 +1,4 @@
+const { supabase } = require("../config/supabase");
 const GlobalController = require("./GlobalController");
 const UserDAO = require("../dao/UserDAO");
 
@@ -7,7 +8,7 @@ class UserController extends GlobalController {
     super(UserDAO);
   }
 
-  // GET /users/me - Obtener perfil del usuario autenticado
+  // GET /users/me - Get authenticated user profile
   async getProfile(req, res) {
     try {
       console.log('req.user completo:', req.user); // Debug
@@ -23,7 +24,7 @@ class UserController extends GlobalController {
         });
       }
       
-      const user = await this.dao.findById(userId);
+      const user = await this.dao.getById(userId);
       console.log("Usuario encontrado:", user);
       
       if (!user) {
@@ -55,7 +56,7 @@ class UserController extends GlobalController {
     }
   }
 
-  // PUT /users/me - Actualizar perfil del usuario autenticado
+  // PUT /users/me - Update authenticated user profile
   async updateProfile(req, res) {
     try {
       console.log('=== DEBUG UPDATE PROFILE ===');
@@ -68,7 +69,7 @@ class UserController extends GlobalController {
       const { firstName, lastName, age, email } = req.body;
       console.log('Body recibido:', req.body);
 
-      // Validaciones básicas
+      // Basic validations
       if (!firstName || !lastName || !age || !email) {
         return res.status(400).json({
           success: false,
@@ -76,7 +77,7 @@ class UserController extends GlobalController {
         });
       }
 
-      // Validar edad mínima
+      // Validate minimum age
       if (age < 13) {
         return res.status(400).json({
           success: false,
@@ -84,7 +85,7 @@ class UserController extends GlobalController {
         });
       }
 
-      // Validar formato de email (básico)
+      // Validate email format (basic)
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email)) {
         return res.status(400).json({
@@ -93,7 +94,7 @@ class UserController extends GlobalController {
         });
       }
 
-      // Verificar si el email ya está en uso por otro usuario
+      // Check if email is already in use by another user
       const existingUser = await this.dao.findByEmail(email);
       console.log('Usuario existente con email:', existingUser);
       
@@ -104,7 +105,7 @@ class UserController extends GlobalController {
         });
       }
 
-      // Mapear campos de entrada (inglés) al modelo (español)
+      // Map input fields (English) to model (Spanish)
       const updateData = {
         nombres: firstName,
         apellidos: lastName,
@@ -114,20 +115,20 @@ class UserController extends GlobalController {
       };
       console.log('Datos a actualizar:', updateData);
 
-      const updatedUser = await this.dao.updateById(userId, updateData);
+      const updatedUser = await this.dao.update(userId, updateData);
       console.log('Usuario actualizado:', updatedUser);
 
       if (!updatedUser) {
-        console.log('❌ updateById retornó null/undefined');
+        console.log('❌ update retornó null/undefined');
         return res.status(404).json({
           success: false,
           message: "Usuario no encontrado"
         });
       }
 
-      // Mapear respuesta del modelo (español) a inglés
+      // Map response from model (Spanish) to English
       const response = {
-        id: updatedUser._id,
+        id: updatedUser.id,
         firstName: updatedUser.nombres,
         lastName: updatedUser.apellidos,
         age: updatedUser.edad,
@@ -150,7 +151,7 @@ class UserController extends GlobalController {
     }
   }
 
-  // DELETE /users/me - Eliminar cuenta del usuario autenticado
+  // DELETE /users/me - Delete authenticated user account
   async deleteAccount(req, res) {
     try {
       console.log('=== DEBUG DELETE ACCOUNT ===');
@@ -164,7 +165,7 @@ class UserController extends GlobalController {
       console.log('Password recibido:', password ? '***' : 'undefined');
       console.log('ConfirmText recibido:', confirmText);
 
-      // Validar que se proporcione la contraseña y confirmación
+      // Validate that password and confirmation are provided
       if (!password || !confirmText) {
         console.log('❌ Faltan password o confirmText');
         return res.status(400).json({
@@ -173,7 +174,7 @@ class UserController extends GlobalController {
         });
       }
 
-      // Validar que el texto de confirmación sea correcto
+      // Validate that confirmation text is correct
       if (confirmText !== "ELIMINAR") {
         console.log('❌ ConfirmText incorrecto:', confirmText);
         return res.status(400).json({
@@ -182,8 +183,8 @@ class UserController extends GlobalController {
         });
       }
 
-      // Obtener usuario para verificar contraseña
-      const user = await this.dao.findById(userId);
+      // Get user to verify password
+      const user = await this.dao.getById(userId);
       console.log('Usuario encontrado:', user ? 'SÍ' : 'NO');
       
       if (!user) {
@@ -194,7 +195,7 @@ class UserController extends GlobalController {
         });
       }
 
-      // Verificar contraseña usando el método del modelo
+      // Verify password using model method
       console.log('Verificando contraseña...');
       const isValidPassword = await user.comparePassword(password);
       console.log('Contraseña válida:', isValidPassword);
@@ -207,9 +208,9 @@ class UserController extends GlobalController {
         });
       }
 
-      // Eliminar usuario
+      // Delete user
       console.log('Eliminando usuario...');
-      const deleteResult = await this.dao.deleteById(userId);
+      const deleteResult = await this.dao.delete(userId);
       console.log('Resultado eliminación:', deleteResult);
 
       console.log('✅ Usuario eliminado exitosamente');
@@ -222,6 +223,194 @@ class UserController extends GlobalController {
       });
     }
   }
+
+ // POST /users/register - Registrar nuevo usuario
+  async registerUser(req, res) {
+  try {
+    const { nombres, apellidos, edad, correo, contrasena } = req.body;
+
+    // Validación básica
+    if (!nombres || !apellidos || !edad || !correo || !contrasena) {
+      return res.status(400).json({
+        success: false,
+        message: "Todos los campos son requeridos"
+      });
+    }
+
+    // Validación de formato de correo
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(correo)) {
+      return res.status(400).json({
+        success: false,
+        message: "Formato de correo inválido"
+      });
+    }
+
+    // Registrar usuario en Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: correo,
+      password: contrasena,
+    });
+
+    if (authError) {
+      console.error("Error de Supabase Auth:", authError);
+      return res.status(400).json({
+        success: false,
+        message: authError.message || "Error al registrar usuario en Supabase Auth"
+      });
+    }
+
+    // ⚠️ Verificar si el usuario fue creado o está pendiente de verificación por correo
+    if (!authData?.user) {
+      console.warn("⚠️ Usuario aún no verificado, Supabase no devolvió user.id");
+      return res.status(202).json({
+        success: true,
+        message: "Registro exitoso. Por favor verifica tu correo electrónico para activar la cuenta."
+      });
+    }
+    const bcrypt = require("bcryptjs");
+    const hashedPassword = await bcrypt.hash(contrasena, 10);
+    // Insertar datos adicionales en la tabla `users`
+    const { data: userData, error: userError } = await supabase
+      .from("users")
+      .insert([
+        {
+         // id_auth: authData.user.id, // ID del usuario en Supabase Auth
+          nombres,
+          apellidos,
+          edad: parseInt(edad),
+          correo,
+          contrasena: hashedPassword,
+          created_at: new Date()
+        }
+      ])
+      .select();
+
+    if (userError) {
+      console.error("Error al insertar en la tabla users:", userError);
+      return res.status(500).json({
+        success: false,
+        message: "No se pudo guardar el usuario en la base de datos",
+        details: userError.message
+      });
+    }
+
+    // Todo salió bien
+    res.status(201).json({
+      success: true,
+      message: "Usuario registrado correctamente",
+      message2: "Por favor verifica tu correo electrónico para activar la cuenta.",
+      data: userData[0]
+    });
+
+  } catch (error) {
+    console.error("Error inesperado al registrar usuario:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error interno del servidor"
+    });
+  }
 }
 
-module.exports = new UserController();
+
+  // GET /users - Obtener todos los usuarios
+  async getAllUsers(req, res) {
+    try {
+      const users = await this.dao.getAll();
+      res.status(200).json({
+        success: true,
+        count: users.length,
+        data: users
+      });
+    } catch (error) {
+      console.error("Error al obtener usuarios:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error interno del servidor"
+      });
+    }
+  }
+
+// POST /api/v1/users/login
+async loginUser(req, res) {
+  try {
+    const { correo, contrasena } = req.body;
+
+    // Validación básica
+    if (!correo || !contrasena) {
+      return res.status(400).json({
+        success: false,
+        message: "Correo y contraseña son requeridos",
+      });
+    }
+
+    // Intentar iniciar sesión en Supabase Auth
+    const { data: authData, error: authError } =
+      await supabase.auth.signInWithPassword({
+        email: correo,
+        password: contrasena,
+      });
+
+
+    console.log("Auth Data:", authData);
+    console.log("correo:", correo);
+    if (authError) {
+      console.error("Error en login:", authError);
+      return res.status(401).json({
+        success: false,
+        message: "Credenciales inválidas o usuario no encontrado",
+      });
+    }
+
+    // Extraer datos del usuario autenticado
+    const user = authData.user;
+
+    // Buscar los datos adicionales del usuario en la tabla `users`
+    const { data: userData, error: userError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("correo", correo)
+      .single();
+
+    if (userError) {
+      console.error("Error al obtener datos del usuario:", userError);
+      return res.status(500).json({
+        success: false,
+        message: "Error al obtener datos adicionales del usuario",
+      });
+    }
+
+    if (!userData) {
+      return res.status(404).json({
+        success: false,
+        message: "Usuario no encontrado en la base de datos",
+      });
+    }
+
+    // Devolver datos del usuario y el token de sesión
+    res.status(200).json({
+      success: true,
+      message: "Inicio de sesión exitoso",
+      user: {
+        id: userData.id,
+        nombres: userData.nombres,
+        apellidos: userData.apellidos,
+        correo: userData.correo,
+        edad: userData.edad,
+      },
+      session: authData.session, // contiene el access_token, refresh_token, etc.
+    });
+
+  } catch (error) {
+    console.error("Error general en loginUser:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+    });
+  }
+}
+
+
+}
+
+module.exports = new UserController();  

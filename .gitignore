@@ -1,2 +1,6 @@
 node_modules
 .env
+test*
+*.sql
+debug-movies.js
+expand-genres.js
