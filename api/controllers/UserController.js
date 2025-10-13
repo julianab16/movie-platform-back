@@ -1,6 +1,10 @@
-const { supabase } = require("../config/supabase");
-const GlobalController = require("./GlobalController");
-const UserDAO = require("../dao/UserDAO");
+import { supabase } from '../config/supabase.js';
+import GlobalController from './GlobalController.js';
+import UserDAO from '../dao/UserDAO.js';
+import User from '../models/User.js';
+import jwt from '../utils/jwt.js';
+import bcrypt from 'bcryptjs';
+import logger from '../utils/logger.js';
 
 class UserController extends GlobalController {
   constructor() {
@@ -223,93 +227,108 @@ class UserController extends GlobalController {
     }
   }
 
- // POST /users/register - Registrar nuevo usuario
+  // POST /users/register - Register new user
   async registerUser(req, res) {
-  try {
-    const { nombres, apellidos, edad, correo, contrasena } = req.body;
+    try {
+      logger.info('USER_CONTROLLER', 'Iniciando registro de usuario', req.body);
 
-    // Validación básica
-    if (!nombres || !apellidos || !edad || !correo || !contrasena) {
-      return res.status(400).json({
-        success: false,
-        message: "Todos los campos son requeridos"
+      // Support both English and Spanish field names
+      const {
+        firstName, lastName, age, email, password,
+        nombres, apellidos, edad, correo, contrasena
+      } = req.body;
+
+      // Map to English (preferred) with Spanish fallback
+      const userData = {
+        firstName: firstName || nombres,
+        lastName: lastName || apellidos, 
+        age: age || edad,
+        email: email || correo,
+        password: password || contrasena
+      };
+
+      // Validation
+      if (!userData.firstName || !userData.lastName || !userData.age || !userData.email || !userData.password) {
+        return res.status(400).json({
+          success: false,
+          message: "All fields are required",
+          message_es: "Todos los campos son requeridos"
+        });
+      }
+
+      // Age validation
+      if (userData.age < 18 || userData.age > 120) {
+        return res.status(400).json({
+          success: false,
+          message: "Age must be between 18 and 120",
+          message_es: "La edad debe estar entre 18 y 120 años"
+        });
+      }
+
+      // Email format validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(userData.email)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid email format",
+          message_es: "Formato de correo inválido"
+        });
+      }
+
+      // Check if user already exists
+      const existingUser = await User.findOne({ email: userData.email });
+      if (existingUser) {
+        return res.status(409).json({
+          success: false,
+          message: "User already exists with this email",
+          message_es: "Ya existe un usuario con este correo"
+        });
+      }
+
+      // Create new user using User model
+      const newUser = new User(userData);
+      const savedUser = await newUser.save();
+
+      logger.success('USER_CONTROLLER', 'Usuario registrado exitosamente', { 
+        userId: savedUser.id, 
+        email: savedUser.email 
       });
-    }
 
-    // Validación de formato de correo
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(correo)) {
-      return res.status(400).json({
-        success: false,
-        message: "Formato de correo inválido"
+      // Generate JWT token
+      const token = jwt.generateToken({
+        id: savedUser.id,
+        email: savedUser.email,
+        firstName: savedUser.firstName,
+        lastName: savedUser.lastName
       });
-    }
 
-    // Registrar usuario en Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: correo,
-      password: contrasena,
-    });
-
-    if (authError) {
-      console.error("Error de Supabase Auth:", authError);
-      return res.status(400).json({
-        success: false,
-        message: authError.message || "Error al registrar usuario en Supabase Auth"
-      });
-    }
-
-    // ⚠️ Verificar si el usuario fue creado o está pendiente de verificación por correo
-    if (!authData?.user) {
-      console.warn("⚠️ Usuario aún no verificado, Supabase no devolvió user.id");
-      return res.status(202).json({
+      // Return success response with token
+      res.status(201).json({
         success: true,
-        message: "Registro exitoso. Por favor verifica tu correo electrónico para activar la cuenta."
-      });
-    }
-    const bcrypt = require("bcryptjs");
-    const hashedPassword = await bcrypt.hash(contrasena, 10);
-    // Insertar datos adicionales en la tabla `users`
-    const { data: userData, error: userError } = await supabase
-      .from("users")
-      .insert([
-        {
-         // id_auth: authData.user.id, // ID del usuario en Supabase Auth
-          nombres,
-          apellidos,
-          edad: parseInt(edad),
-          correo,
-          contrasena: hashedPassword,
-          created_at: new Date()
+        message: "User registered successfully",
+        message_es: "Usuario registrado exitosamente",
+        data: {
+          user: {
+            id: savedUser.id,
+            firstName: savedUser.firstName,
+            lastName: savedUser.lastName,
+            age: savedUser.age,
+            email: savedUser.email,
+            createdAt: savedUser.createdAt
+          },
+          token: token
         }
-      ])
-      .select();
+      });
 
-    if (userError) {
-      console.error("Error al insertar en la tabla users:", userError);
-      return res.status(500).json({
+    } catch (error) {
+      logger.error('USER_CONTROLLER', 'Error al registrar usuario', error);
+      res.status(500).json({
         success: false,
-        message: "No se pudo guardar el usuario en la base de datos",
-        details: userError.message
+        message: "Internal server error",
+        message_es: "Error interno del servidor"
       });
     }
-
-    // Todo salió bien
-    res.status(201).json({
-      success: true,
-      message: "Usuario registrado correctamente",
-      message2: "Por favor verifica tu correo electrónico para activar la cuenta.",
-      data: userData[0]
-    });
-
-  } catch (error) {
-    console.error("Error inesperado al registrar usuario:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error interno del servidor"
-    });
   }
-}
 
 
   // GET /users - Obtener todos los usuarios
@@ -330,86 +349,166 @@ class UserController extends GlobalController {
     }
   }
 
-// POST /api/v1/users/login
-async loginUser(req, res) {
-  try {
-    const { correo, contrasena } = req.body;
+  // POST /users/login - User authentication
+  async loginUser(req, res) {
+    try {
+      logger.info('USER_CONTROLLER', 'Iniciando login', req.body);
 
-    // Validación básica
-    if (!correo || !contrasena) {
-      return res.status(400).json({
+      // Support both English and Spanish field names
+      const {
+        email, password,
+        correo, contrasena
+      } = req.body;
+
+      // Map to English (preferred) with Spanish fallback
+      const loginData = {
+        email: email || correo,
+        password: password || contrasena
+      };
+
+      // Basic validation
+      if (!loginData.email || !loginData.password) {
+        return res.status(400).json({
+          success: false,
+          message: "Email and password are required",
+          message_es: "Correo y contraseña son requeridos"
+        });
+      }
+
+      // Find user by email
+      const user = await User.findOne({ email: loginData.email });
+      if (!user) {
+        logger.warn('USER_CONTROLLER', 'Usuario no encontrado', { email: loginData.email });
+        return res.status(401).json({
+          success: false,
+          message: "Invalid credentials",
+          message_es: "Credenciales inválidas"
+        });
+      }
+
+      // Check if account is locked
+      if (user.isAccountLocked()) {
+        const lockTime = Math.ceil((user.lockedUntil - Date.now()) / 1000 / 60);
+        logger.warn('USER_CONTROLLER', 'Cuenta bloqueada', { 
+          email: loginData.email, 
+          lockTime: lockTime 
+        });
+        
+        return res.status(423).json({
+          success: false,
+          message: `Account locked. Try again in ${lockTime} minutes`,
+          message_es: `Cuenta bloqueada. Intente nuevamente en ${lockTime} minutos`
+        });
+      }
+
+      // Verify password
+      const isValidPassword = await user.comparePassword(loginData.password);
+      if (!isValidPassword) {
+        // Increment failed attempts
+        user.failedAttempts = (user.failedAttempts || 0) + 1;
+        
+        // Lock account if too many failed attempts
+        if (user.failedAttempts >= 5) {
+          user.lockedUntil = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+          logger.warn('USER_CONTROLLER', 'Cuenta bloqueada por intentos fallidos', { 
+            email: loginData.email, 
+            attempts: user.failedAttempts 
+          });
+        }
+        
+        await user.save();
+
+        return res.status(401).json({
+          success: false,
+          message: "Invalid credentials",
+          message_es: "Credenciales inválidas"
+        });
+      }
+
+      // Reset failed attempts and update last login
+      user.failedAttempts = 0;
+      user.lockedUntil = undefined;
+      user.lastLogin = new Date();
+      await user.save();
+
+      // Generate JWT token
+      const token = jwt.generateToken({
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName
+      });
+
+      logger.success('USER_CONTROLLER', 'Login exitoso', { 
+        userId: user.id, 
+        email: user.email 
+      });
+
+      // Return success response
+      res.status(200).json({
+        success: true,
+        message: "Login successful",
+        message_es: "Inicio de sesión exitoso",
+        data: {
+          user: {
+            id: user.id,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            age: user.age,
+            email: user.email,
+            lastLogin: user.lastLogin
+          },
+          token: token
+        }
+      });
+
+    } catch (error) {
+      logger.error('USER_CONTROLLER', 'Error en login', error);
+      res.status(500).json({
         success: false,
-        message: "Correo y contraseña son requeridos",
+        message: "Internal server error",
+        message_es: "Error interno del servidor"
       });
     }
-
-    // Intentar iniciar sesión en Supabase Auth
-    const { data: authData, error: authError } =
-      await supabase.auth.signInWithPassword({
-        email: correo,
-        password: contrasena,
-      });
-
-
-    console.log("Auth Data:", authData);
-    console.log("correo:", correo);
-    if (authError) {
-      console.error("Error en login:", authError);
-      return res.status(401).json({
-        success: false,
-        message: "Credenciales inválidas o usuario no encontrado",
-      });
-    }
-
-    // Extraer datos del usuario autenticado
-    const user = authData.user;
-
-    // Buscar los datos adicionales del usuario en la tabla `users`
-    const { data: userData, error: userError } = await supabase
-      .from("users")
-      .select("*")
-      .eq("correo", correo)
-      .single();
-
-    if (userError) {
-      console.error("Error al obtener datos del usuario:", userError);
-      return res.status(500).json({
-        success: false,
-        message: "Error al obtener datos adicionales del usuario",
-      });
-    }
-
-    if (!userData) {
-      return res.status(404).json({
-        success: false,
-        message: "Usuario no encontrado en la base de datos",
-      });
-    }
-
-    // Devolver datos del usuario y el token de sesión
-    res.status(200).json({
-      success: true,
-      message: "Inicio de sesión exitoso",
-      user: {
-        id: userData.id,
-        nombres: userData.nombres,
-        apellidos: userData.apellidos,
-        correo: userData.correo,
-        edad: userData.edad,
-      },
-      session: authData.session, // contiene el access_token, refresh_token, etc.
-    });
-
-  } catch (error) {
-    console.error("Error general en loginUser:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error interno del servidor",
-    });
   }
-}
+
+  // POST /users/logout - User logout (invalidate token)
+  async logoutUser(req, res) {
+    try {
+      const token = req.headers.authorization?.replace('Bearer ', '');
+      
+      if (!token) {
+        return res.status(400).json({
+          success: false,
+          message: "No token provided",
+          message_es: "Token no proporcionado"
+        });
+      }
+
+      const userId = req.user?.id || req.user?.userId;
+      
+      // Invalidate JWT token
+      await jwt.invalidateToken(token, userId, 'logout');
+
+      logger.info('USER_CONTROLLER', 'Logout exitoso', { userId });
+
+      res.status(200).json({
+        success: true,
+        message: "Logout successful",
+        message_es: "Cierre de sesión exitoso"
+      });
+
+    } catch (error) {
+      logger.error('USER_CONTROLLER', 'Error en logout', error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        message_es: "Error interno del servidor"
+      });
+    }
+  }
 
 
 }
 
-module.exports = new UserController();  
+export default new UserController();  

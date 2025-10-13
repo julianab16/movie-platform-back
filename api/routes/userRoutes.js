@@ -1,13 +1,23 @@
-const express = require("express");
+import express from 'express';
+import UserController from '../controllers/UserController.js';
+
 const router = express.Router();
 
-const UserController = require("../controllers/UserController");
+// CRUD básico (heredado de GlobalController)
+router.get("/", UserController.getAll);
+router.get("/:id", UserController.read);
+router.post("/", UserController.create);
+router.put("/:id", UserController.update);
+router.delete("/:id", UserController.delete);
 
-router.get("/", (req, res) => UserController.getAll(req, res));
-router.get("/:id", (req, res) => UserController.read(req, res));
-router.post("/", (req, res) => UserController.create(req, res));
-router.put("/:id", (req, res) => UserController.update(req, res));
-router.delete("/:id", (req, res) => UserController.delete(req, res));
+// Rutas específicas de autenticación
+router.post("/register", UserController.registerUser);
+router.post("/login", UserController.loginUser);
+router.post("/logout", UserController.logoutUser);
 
+// Rutas protegidas (requieren autenticación)
+router.get("/me", UserController.getProfile);
+router.put("/me", UserController.updateProfile);
+router.delete("/me", UserController.deleteAccount);
 
-module.exports = router;
+export default router;

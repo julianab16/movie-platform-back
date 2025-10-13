@@ -1,6 +1,6 @@
-const bcrypt = require('bcryptjs');
-const { verifyToken } = require('../utils/jwt'); // Usar la función del jwt.js
-const logger = require('../utils/logger');
+import bcrypt from 'bcryptjs';
+import jwt from '../utils/jwt.js';
+import logger from '../utils/logger.js';
 
 const authenticateToken = async (req, res, next) => {
   try {
@@ -16,7 +16,7 @@ const authenticateToken = async (req, res, next) => {
     }
 
     // Usar la función verifyToken del utils/jwt.js
-    const decoded = await verifyToken(token);
+    const decoded = await jwt.verifyToken(token);
     
     logger.debug('JWT', `Token validado para usuario: ${decoded.correo}`, decoded);
     req.user = decoded; // Contiene userId y correo
@@ -82,4 +82,4 @@ const preSave = (schema) => {
   });
 };
 
-module.exports = { authenticateToken, preSave };
+export { authenticateToken, preSave };
