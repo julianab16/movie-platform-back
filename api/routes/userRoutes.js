@@ -1,127 +1,13 @@
-// routes/users.js - Ejemplo de rutas para usuarios
-import express from 'express';
-import { supabase, supabaseAdmin } from '../config/supabase.js';
-
+const express = require("express");
 const router = express.Router();
 
-// GET - Obtener todos los usuarios
-router.get('/users', async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*');
-    
-    if (error) throw error;
-    
-    res.json({ 
-      success: true, 
-      data 
-    });
-  } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-});
+const UserController = require("../controllers/UserController");
 
-// GET - Obtener un usuario por ID
-router.get('/users/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', id)
-      .single();
-    
-    if (error) throw error;
-    
-    res.json({ 
-      success: true, 
-      data 
-    });
-  } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-});
+router.get("/", (req, res) => UserController.getAll(req, res));
+router.get("/:id", (req, res) => UserController.read(req, res));
+router.post("/", (req, res) => UserController.create(req, res));
+router.put("/:id", (req, res) => UserController.update(req, res));
+router.delete("/:id", (req, res) => UserController.delete(req, res));
 
-// POST - Crear un nuevo usuario
-router.post('/users', async (req, res) => {
-  try {
-    const userData = req.body;
-    
-    const { data, error } = await supabase
-      .from('users')
-      .insert([userData])
-      .select();
-    
-    if (error) throw error;
-    
-    res.status(201).json({ 
-      success: true, 
-      data 
-    });
-  } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-});
 
-// PUT - Actualizar un usuario
-router.put('/users/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updates = req.body;
-    
-    const { data, error } = await supabase
-      .from('users')
-      .update(updates)
-      .eq('id', id)
-      .select();
-    
-    if (error) throw error;
-    
-    res.json({ 
-      success: true, 
-      data 
-    });
-  } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-});
-
-// DELETE - Eliminar un usuario
-router.delete('/users/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    const { error } = await supabase
-      .from('users')
-      .delete()
-      .eq('id', id);
-    
-    if (error) throw error;
-    
-    res.json({ 
-      success: true, 
-      message: 'Usuario eliminado correctamente' 
-    });
-  } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-});
-
-export default router;
+module.exports = router;
