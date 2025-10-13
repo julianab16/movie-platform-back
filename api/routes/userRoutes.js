@@ -1,15 +1,15 @@
 const express = require("express");
-const router = express.Router();
-
 const UserController = require("../controllers/UserController");
 
-router.get("/", (req, res) => UserController.getAll(req, res));
-router.get("/:id", (req, res) => UserController.read(req, res));
-router.post("/", (req, res) => UserController.create(req, res));
-router.put("/:id", (req, res) => UserController.update(req, res));
-router.delete("/:id", (req, res) => UserController.delete(req, res));
+const router = express.Router();
 
+// Rutas públicas
 router.post("/register", (req, res) => UserController.registerUser(req, res));
+
+// Rutas protegidas (si luego añades autenticación con token)
 router.get("/", (req, res) => UserController.getAllUsers(req, res));
+router.get("/me", (req, res) => UserController.getProfile(req, res));
+router.put("/me", (req, res) => UserController.updateProfile(req, res));
+router.delete("/me", (req, res) => UserController.deleteAccount(req, res));
 
 module.exports = router;
