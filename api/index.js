@@ -3,11 +3,19 @@ import express from 'express';
 import dotenv from 'dotenv';
 import { testConnection } from './config/supabase.js';
 import routes from './routes/routes.js';
+import cors from 'cors';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+//configuración de cors
+app.use(cors({
+  origin: 'http://localhost:5173', // tu frontend
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true
+}));
 
 // Middlewares
 app.use(express.json());
