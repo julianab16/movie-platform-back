@@ -118,4 +118,4 @@ class GlobalController {
   };
 }
 
-module.exports = GlobalController;
+export default GlobalController;

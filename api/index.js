@@ -2,6 +2,8 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import { testConnection } from './config/supabase.js';
+import cors from 'cors';
+import router from './routes/routes.js';
 
 dotenv.config();
 
@@ -11,7 +13,12 @@ const PORT = process.env.PORT || 3000;
 // Middlewares
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
+app.use('/api/v1', router);
+app.use(cors({
+  origin: 'http://localhost:5173', // frontend de Vite
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 // Verificar conexión con Supabase al iniciar
 testConnection();
 

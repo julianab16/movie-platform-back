@@ -1,5 +1,5 @@
-const GlobalController = require('./GlobalController');
-const MoviesDAO = require('../dao/MoviesDAO');
+import GlobalController from './GlobalController.js';
+import MoviesDAO from '../dao/MoviesDAO.js';
 
 class MoviesController extends GlobalController {
   constructor() {
@@ -43,4 +43,4 @@ class MoviesController extends GlobalController {
   };
 }
 
-module.exports = new MoviesController();
+export default new MoviesController();

@@ -6,8 +6,8 @@
  * @since 1.0.0
  */
 
-const { supabase } = require('../config/supabase');
-const logger = require('../utils/logger');
+import { supabase } from '../config/supabase.js';
+import logger from '../utils/logger.js';
 
 /**
  * Modelo para gestión de intentos de login por IP
@@ -266,4 +266,4 @@ class LoginAttempt {
   }
 }
 
-module.exports = LoginAttempt;
+export default LoginAttempt;

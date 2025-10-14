@@ -49,7 +49,7 @@ class UserDAO extends GlobalDAO {
     }
 
     return await this.update(userId, updateData);
-  }
+  }                 
 
   // Method to reset login attempts
   async resetLoginAttempts(userId) {

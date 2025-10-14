@@ -1,6 +1,6 @@
-const CommentsDAO = require('../dao/CommentsDAO');
-const UserDAO = require('../dao/UserDAO');
-const MoviesDAO = require('../dao/MoviesDAO');
+import CommentsDAO from '../dao/CommentsDAO.js';
+import UserDAO from '../dao/UserDAO.js';
+import MoviesDAO from '../dao/MoviesDAO.js';
 
 class CommentsController {
   
@@ -308,4 +308,4 @@ class CommentsController {
   }
 }
 
-module.exports = new CommentsController();
+export default new CommentsController();
