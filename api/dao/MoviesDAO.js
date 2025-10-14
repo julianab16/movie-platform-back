@@ -1,4 +1,5 @@
-const GlobalDAO = require('./GlobalDAO');
+import GlobalDAO from './GlobalDAO.js';
+import { supabase } from '../config/supabase.js';
 
 class MoviesDAO extends GlobalDAO {
   constructor() {
@@ -12,7 +13,7 @@ class MoviesDAO extends GlobalDAO {
 
   // Method to search movies by name (partial search)
   async searchByNombre(nombre) {
-    const { data, error } = await require('../config/supabase').supabase
+    const { data, error } = await supabase
       .from(this.tableName)
       .select('*')
       .ilike('nombre', `%${nombre}%`)
@@ -23,4 +24,4 @@ class MoviesDAO extends GlobalDAO {
   }
 }
 
-module.exports = new MoviesDAO();
+export default new MoviesDAO();

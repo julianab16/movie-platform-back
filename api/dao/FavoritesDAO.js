@@ -6,7 +6,7 @@ class FavoritesDAO extends GlobalDAO {
     super('favorites');
   }
 
-  // Get user favorites (solo los IDs básicos)
+  // Get user favorites (only basic IDs)
   async getFavoritesByUserId(userId) {
     const { data, error } = await supabase
       .from(this.tableName)
@@ -36,7 +36,7 @@ class FavoritesDAO extends GlobalDAO {
 
   // Add to favorites
   async addFavorite(userId, movieId) {
-    // Verificar si ya existe
+    // Check if it already exists
     const exists = await this.isFavorite(userId, movieId);
     if (exists) {
       throw new Error('Movie is already in favorites');

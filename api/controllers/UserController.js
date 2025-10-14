@@ -73,7 +73,7 @@ class UserController extends GlobalController {
 
       const { nombres, apellidos, edad, correo, contrasena, confirmacion } = req.body;
 
-      // No permitir modificar el correo
+      // Do not allow email modification
       if (correo !== undefined) {
         return res.status(400).json({ 
           success: false, 
@@ -81,7 +81,7 @@ class UserController extends GlobalController {
         });
       }
 
-      // Validar que haya al menos un campo editable
+      // Validate that there is at least one editable field
       if (!nombres && !apellidos && !edad && !contrasena) {
         return res.status(400).json({
           success: false,
@@ -94,7 +94,7 @@ class UserController extends GlobalController {
       if (nombres) updateData.nombres = nombres;
       if (apellidos) updateData.apellidos = apellidos;
 
-      // Validar edad
+      // Validate age
       if (edad !== undefined) {
         const numEdad = parseInt(edad);
         if (isNaN(numEdad) || numEdad < 13) {
@@ -106,7 +106,7 @@ class UserController extends GlobalController {
         updateData.edad = numEdad;
       }
 
-      // Validar y encriptar contraseña si se envía
+      // Validate and encrypt password if provided
       if (contrasena) {
         const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
         if (!passwordRegex.test(contrasena)) {
@@ -128,7 +128,7 @@ class UserController extends GlobalController {
 
       updateData.updated_at = new Date().toISOString();
 
-      // Actualizar en la base de datos
+      // Update in the database
       const { data: updatedUser, error: updateError } = await supabase
         .from("users")
         .update(updateData)
@@ -145,7 +145,7 @@ class UserController extends GlobalController {
         });
       }
 
-      // Respuesta final
+      // Final response
       res.status(200).json({
         success: true,
         message: "Perfil actualizado exitosamente",

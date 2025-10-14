@@ -1,5 +1,5 @@
-const GlobalDAO = require("./GlobalDAO");
-const { supabase } = require('../config/supabase');
+import GlobalDAO from "./GlobalDAO.js";
+import { supabase } from '../config/supabase.js';
 
 class CommentsDAO extends GlobalDAO {
   constructor() {
@@ -172,4 +172,4 @@ class CommentsDAO extends GlobalDAO {
   }
 }
 
-module.exports = new CommentsDAO();
+export default new CommentsDAO();

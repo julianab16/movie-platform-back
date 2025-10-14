@@ -6,35 +6,35 @@ const jwt = jsonwebtoken;
 const JWT_SECRET = process.env.JWT_SECRET || 'tu-jwt-secret-super-seguro-aqui';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '2h';
 
-// GENERAR TOKEN JWT
+// GENERATE JWT TOKEN
 const generateToken = (user) => {
-    // información que va dentro del token
+    // information that goes inside the token
   const payload = {
-    userId: user._id,
-    correo: user.correo
+    userId: user.id || user._id,  // Support both id formats
+    correo: user.email || user.correo  // Support both field names
   };
   
-  // Crear el token JWT con:
-  // - payload: la información del usuario
-  // - secret: clave secreta para firmar el token
-  // - opciones: configuración adicional
+  // Create the JWT token with:
+  // - payload: user information
+  // - secret: secret key to sign the token
+  // - options: additional configuration
   return jwt.sign(payload, JWT_SECRET, {
     expiresIn: JWT_EXPIRES_IN,
-    issuer: 'task-manager-app', // emisor del token
-    audience: 'task-manager-users' // audiencia del token
+    issuer: 'movie-platform-app', // token issuer
+    audience: 'movie-platform-users' // token audience
   });
 };
 
-// VERIFICAR TOKEN JWT
+// VERIFY JWT TOKEN
 const verifyToken = async (token) => {
   try {
-    // Verificar si el token está en blacklist
+    // Check if token is blacklisted
     const isBlacklisted = await BlacklistedToken.isBlacklisted(token);
     if (isBlacklisted) {
       throw new Error('TOKEN_BLACKLISTED');
     }
     
-    // Verificar firma y expiración
+    // Verify signature and expiration
     const decoded = jwt.verify(token, JWT_SECRET);
     
     return decoded;
@@ -49,7 +49,7 @@ const verifyToken = async (token) => {
   }
 };
 
-// INVALIDAR TOKEN (para logout)
+// INVALIDATE TOKEN (for logout)
 const invalidateToken = async (token, userId, reason = 'logout') => {
   await BlacklistedToken.addToBlacklist(token, userId, reason);
 };

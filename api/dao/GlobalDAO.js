@@ -1,4 +1,4 @@
-const { supabase } = require('../config/supabase');
+import { supabase } from '../config/supabase.js';
 
 class GlobalDAO {
   constructor(tableName) {
@@ -96,4 +96,4 @@ class GlobalDAO {
   }
 }
 
-module.exports = GlobalDAO;
+export default GlobalDAO;

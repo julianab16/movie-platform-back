@@ -1,6 +1,6 @@
 /**
- * @fileoverview Modelo para gestión de tokens en blacklist.
- * Maneja tokens JWT invalidados por logout o seguridad.
+ * @fileoverview Model for blacklist token management.
+ * Handles invalidated JWT tokens due to logout or security.
  * 
  * @module models/BlacklistedToken
  * @since 1.0.0
@@ -11,22 +11,22 @@ import logger from '../utils/logger.js';
 import crypto from 'crypto';
 
 /**
- * Modelo para gestión de tokens invalidados con Supabase
+ * Model for managing invalidated tokens with Supabase
  */
 class BlacklistedToken {
   /**
-   * Añade un token a la blacklist
-   * @param {string} token - Token JWT a invalidar
-   * @param {string} userId - ID del usuario propietario del token
-   * @param {string} [reason='logout'] - Razón de la invalidación
+   * Adds a token to the blacklist
+   * @param {string} token - JWT token to invalidate
+   * @param {string} userId - ID of the user who owns the token
+   * @param {string} [reason='logout'] - Reason for invalidation
    * @returns {Promise<void>}
    */
   static async addToBlacklist(token, userId, reason = 'logout') {
     try {
-      // Crear hash del token por seguridad (no almacenar token completo)
+      // Create token hash for security (don't store complete token)
       const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
       
-      // Extraer fecha de expiración del JWT
+      // Extract expiration date from JWT
       const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
       const expiresAt = new Date(payload.exp * 1000);
 
@@ -52,9 +52,9 @@ class BlacklistedToken {
   }
 
   /**
-   * Verifica si un token está en la blacklist
-   * @param {string} token - Token JWT a verificar
-   * @returns {Promise<boolean>} True si está en blacklist
+   * Checks if a token is in the blacklist
+   * @param {string} token - JWT token to check
+   * @returns {Promise<boolean>} True if in blacklist
    */
   static async isBlacklisted(token) {
     try {
@@ -69,19 +69,19 @@ class BlacklistedToken {
 
       if (error && error.code !== 'PGRST116') {
         logger.error('BLACKLIST_MODEL', 'Error al verificar token en blacklist', error);
-        return false; // En caso de error, permitir el token
+        return false; // In case of error, allow the token
       }
 
-      return !!data; // True si encontró el token
+      return !!data; // True if token was found
     } catch (error) {
       logger.error('BLACKLIST_MODEL', 'Error al verificar token en blacklist', error);
-      return false; // En caso de error, permitir el token
+      return false; // In case of error, allow the token
     }
   }
 
   /**
-   * Limpia tokens expirados de la blacklist
-   * @returns {Promise<number>} Número de tokens eliminados
+   * Cleans expired tokens from the blacklist
+   * @returns {Promise<number>} Number of deleted tokens
    */
   static async cleanExpiredTokens() {
     try {
@@ -105,8 +105,8 @@ class BlacklistedToken {
   }
 
   /**
-   * Obtiene estadísticas de la blacklist
-   * @returns {Promise<object>} Estadísticas de la blacklist
+   * Gets blacklist statistics
+   * @returns {Promise<object>} Blacklist statistics
    */
   static async getStats() {
     try {
@@ -130,7 +130,7 @@ class BlacklistedToken {
   }
 
   /**
-   * Limpia toda la blacklist (solo para testing)
+   * Clears the entire blacklist (for testing only)
    * @returns {Promise<void>}
    */
   static async clearAll() {
@@ -138,7 +138,7 @@ class BlacklistedToken {
       const { error } = await supabase
         .from('blacklisted_tokens')
         .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000'); // Eliminar todos
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
 
       if (error) {
         logger.error('BLACKLIST_MODEL', 'Error al limpiar blacklist', error);

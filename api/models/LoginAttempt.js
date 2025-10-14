@@ -1,6 +1,6 @@
 /**
- * @fileoverview Modelo para tracking de intentos de login usando Supabase.
- * Proporciona seguridad contra ataques de fuerza bruta.
+ * @fileoverview Model for tracking login attempts using Supabase.
+ * Provides security against brute force attacks.
  * 
  * @module models/LoginAttempt
  * @since 1.0.0
@@ -10,7 +10,7 @@ const { supabase } = require('../config/supabase');
 const logger = require('../utils/logger');
 
 /**
- * Modelo para gestión de intentos de login por IP
+ * Model for managing login attempts per IP
  */
 class LoginAttempt {
   constructor(data) {
@@ -22,9 +22,9 @@ class LoginAttempt {
   }
 
   /**
-   * Busca intentos de login por IP
-   * @param {Object} query - Query de búsqueda
-   * @returns {Promise<LoginAttempt|null>} Registro de intentos o null
+   * Find login attempts by IP
+   * @param {Object} query - Search query
+   * @returns {Promise<LoginAttempt|null>} Attempt record or null
    */
   static async findOne(query) {
     try {
@@ -56,8 +56,8 @@ class LoginAttempt {
   }
 
   /**
-   * Guarda el registro de intentos
-   * @returns {Promise<LoginAttempt>} Registro guardado
+   * Saves the attempt record
+   * @returns {Promise<LoginAttempt>} Saved record
    */
   async save() {
     try {
@@ -89,8 +89,8 @@ class LoginAttempt {
   }
 
   /**
-   * Verifica si la IP está bloqueada
-   * @returns {boolean} True si está bloqueada
+   * Checks if the IP is blocked
+   * @returns {boolean} True if blocked
    */
   isBlocked() {
     if (!this.blockedUntil) return false;
@@ -98,20 +98,20 @@ class LoginAttempt {
     const now = new Date();
     const isBlocked = now < this.blockedUntil;
     
-    // Si ya pasó el tiempo de bloqueo, desbloqueamos automáticamente
+    // If the blocking time has passed, unblock automatically
     if (!isBlocked && this.blockedUntil) {
       this.blockedUntil = null;
       this.attempts = 0;
-      this.save(); // Guardar cambios
+      this.save(); // Save changes
     }
     
     return isBlocked;
   }
 
   /**
-   * Registra un intento de login fallido
-   * @param {string} ip - IP del cliente
-   * @returns {Promise<LoginAttempt>} Registro actualizado
+   * Records a failed login attempt
+   * @param {string} ip - Client IP
+   * @returns {Promise<LoginAttempt>} Updated record
    */
   static async recordFailedAttempt(ip) {
     try {
@@ -124,9 +124,9 @@ class LoginAttempt {
       attempt.attempts = (attempt.attempts || 0) + 1;
       attempt.lastAttempt = new Date();
       
-      // Bloquear después de 10 intentos fallidos en 10 minutos
+      // Block after 10 failed attempts in 10 minutes
       if (attempt.attempts >= 10) {
-        attempt.blockedUntil = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
+        attempt.blockedUntil = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
         logger.warn('SECURITY', `IP bloqueada por intentos fallidos: ${ip}`, {
           attempts: attempt.attempts,
           blockedUntil: attempt.blockedUntil
@@ -142,9 +142,9 @@ class LoginAttempt {
   }
 
   /**
-   * Registra un login exitoso
-   * @param {string} ip - IP del cliente
-   * @returns {Promise<LoginAttempt>} Registro actualizado
+   * Records a successful login
+   * @param {string} ip - Client IP
+   * @returns {Promise<LoginAttempt>} Updated record
    */
   static async recordSuccessfulLogin(ip) {
     try {
@@ -154,7 +154,7 @@ class LoginAttempt {
         attempt = new LoginAttempt({ ip });
       }
       
-      // Resetear intentos fallidos en login exitoso
+      // Reset failed attempts on successful login
       attempt.attempts = 0;
       attempt.blockedUntil = null;
       attempt.sucessfulLogins = (attempt.sucessfulLogins || 0) + 1;
@@ -170,8 +170,8 @@ class LoginAttempt {
   }
 
   /**
-   * Limpia intentos antiguos (>24 horas)
-   * @returns {Promise<number>} Número de registros eliminados
+   * Cleans old attempts (>24 hours)
+   * @returns {Promise<number>} Number of deleted records
    */
   static async cleanOldAttempts() {
     try {
@@ -200,8 +200,8 @@ class LoginAttempt {
   }
 
   /**
-   * Obtiene estadísticas de intentos de login
-   * @returns {Promise<Object>} Estadísticas
+   * Gets login attempt statistics
+   * @returns {Promise<Object>} Statistics
    */
   static async getStats() {
     try {
@@ -245,14 +245,14 @@ class LoginAttempt {
   }
 
   /**
-   * Limpia todos los registros (solo para testing)
+   * Clears all records (for testing only)
    */
   static async clearAll() {
     try {
       const { error } = await supabase
         .from('login_attempts')
         .delete()
-        .neq('ip', ''); // Eliminar todos los registros
+        .neq('ip', ''); // Delete all records
 
       if (error) {
         throw error;

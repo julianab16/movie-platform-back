@@ -1,8 +1,8 @@
-const express = require("express");
-const userRoutes = require("./userRoutes");
-const moviesRoutes = require("./moviesRoutes");
-const favoritesRoutes = require("./favoritesRoutes");
-const commentsRoutes = require("./commentsRoutes");
+import express from "express";
+import userRoutes from "./userRoutes.js";
+import moviesRoutes from "./moviesRoutes.js";
+import favoritesRoutes from "./favoritesRoutes.js";
+import commentsRoutes from "./commentsRoutes.js";
 
 const router = express.Router();
 
@@ -11,4 +11,4 @@ router.use("/movies", moviesRoutes);
 router.use("/favorites", favoritesRoutes);
 router.use("/comments", commentsRoutes);
 
-module.exports = router;
+export default router;

@@ -1,6 +1,6 @@
 /**
- * @fileoverview Rutas para gestión de películas favoritas
- * Maneja todas las rutas relacionadas con favoritos de usuarios
+ * @fileoverview Routes for managing favorite movies
+ * Handles all routes related to user favorites
  * 
  * @module routes/favoritesRoutes
  * @since 1.0.0
@@ -12,52 +12,52 @@ import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Middleware de autenticación para todas las rutas de favoritos
+// Authentication middleware for all favorites routes
 router.use(authenticateToken);
 
 /**
  * GET /api/favorites
- * Obtener todas las películas favoritas del usuario autenticado
- * Requiere: Token JWT válido
- * Response: Array de películas favoritas
+ * Get all favorite movies of authenticated user
+ * Requires: Valid JWT token
+ * Response: Array of favorite movies
  */
 router.get('/', FavoritesController.getUserFavorites);
 
 /**
  * POST /api/favorites
- * Agregar una película a favoritos
- * Requiere: Token JWT válido + datos de la película
+ * Add a movie to favorites
+ * Requires: Valid JWT token + movie data
  * Body: { movieId, movieTitle, moviePosterUrl?, movieReleaseDate?, movieRating?, movieGenre? }
  */
 router.post('/', FavoritesController.addToFavorites);
 
 /**
  * GET /api/favorites/stats
- * Obtener estadísticas de favoritos del usuario
- * Requiere: Token JWT válido
+ * Get user favorites statistics
+ * Requires: Valid JWT token
  * Response: { totalFavorites, genreDistribution, recentFavorites }
  */
 router.get('/stats', FavoritesController.getFavoritesStats);
 
 /**
  * GET /api/favorites/check/:movieId
- * Verificar si una película específica está en favoritos
- * Requiere: Token JWT válido + movieId en params
+ * Check if a specific movie is in favorites
+ * Requires: Valid JWT token + movieId in params
  * Response: { isFavorite: boolean, addedAt?: string }
  */
 router.get('/check/:movieId', FavoritesController.checkIfFavorite);
 
 /**
  * DELETE /api/favorites/:movieId
- * Remover una película específica de favoritos
- * Requiere: Token JWT válido + movieId en params
+ * Remove a specific movie from favorites
+ * Requires: Valid JWT token + movieId in params
  */
 router.delete('/:movieId', FavoritesController.removeFromFavorites);
 
 /**
  * DELETE /api/favorites
- * Limpiar todos los favoritos del usuario (acción destructiva)
- * Requiere: Token JWT válido
+ * Clear all user favorites (destructive action)
+ * Requires: Valid JWT token
  * Response: { deletedCount: number }
  */
 router.delete('/', FavoritesController.clearAllFavorites);

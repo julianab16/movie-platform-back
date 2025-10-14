@@ -49,13 +49,16 @@ class GlobalController {
   // Create new record
   create = async (req, res) => {
     try {
+      console.log('Creating record with data:', req.body);
       const newItem = await this.dao.create(req.body);
+      console.log('Record created successfully:', newItem);
       res.status(201).json({
         success: true,
         message: 'Registro creado exitosamente',
         data: newItem
       });
     } catch (error) {
+      console.error('Error creating record:', error);
       res.status(400).json({
         success: false,
         message: 'Error al crear registro',
@@ -118,4 +121,4 @@ class GlobalController {
   };
 }
 
-module.exports = GlobalController;
+export default GlobalController;

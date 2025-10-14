@@ -1,6 +1,6 @@
 /**
- * @fileoverview Sistema de logging personalizado.
- * Proporciona logs organizados y coloreados para desarrollo.
+ * @fileoverview Custom logging system.
+ * Provides organized and colored logs for development.
  * 
  * @module utils/logger
  * @since 1.0.0
@@ -24,8 +24,8 @@ const colors = {
 };
 
 /**
- * Obtiene timestamp formateado
- * @returns {string} Timestamp en formato HH:mm:ss
+ * Gets formatted timestamp
+ * @returns {string} Timestamp in HH:mm:ss format
  */
 const getTimestamp = () => {
   const now = new Date();
@@ -33,23 +33,23 @@ const getTimestamp = () => {
 };
 
 /**
- * Formatea un log con color y categoría
- * @param {string} level - Nivel del log (INFO, ERROR, etc.)
- * @param {string} category - Categoría del log
- * @param {string} message - Mensaje del log
- * @param {string} color - Color ANSI
- * @returns {string} Log formateado
+ * Formats a log with color and category
+ * @param {string} level - Log level (INFO, ERROR, etc.)
+ * @param {string} category - Log category
+ * @param {string} message - Log message
+ * @param {string} color - ANSI color
+ * @returns {string} Formatted log
  */
 const formatLog = (level, category, message, color) => {
   const timestamp = getTimestamp();
   const isDev = process.env.NODE_ENV === 'development';
   
   if (!isDev) {
-    // En producción, log simple sin colores
+    // In production, simple log without colors
     return `[${timestamp}] ${level} [${category}] ${message}`;
   }
   
-  // En desarrollo, log con colores y formato mejorado
+  // In development, log with colors and improved format
   return `${colors.gray}[${timestamp}]${colors.reset} ${color}${level}${colors.reset} ${colors.cyan}[${category}]${colors.reset} ${message}`;
 };
 
@@ -58,10 +58,10 @@ const formatLog = (level, category, message, color) => {
  */
 const logger = {
   /**
-   * Log de información general
-   * @param {string} category - Categoría del log
-   * @param {string} message - Mensaje
-   * @param {any} [data] - Datos adicionales
+   * General information log
+   * @param {string} category - Log category
+   * @param {string} message - Message
+   * @param {any} [data] - Additional data
    */
   info: (category, message, data = null) => {
     const log = formatLog('INFO', category, message, colors.blue);
@@ -72,10 +72,10 @@ const logger = {
   },
 
   /**
-   * Log de éxito
-   * @param {string} category - Categoría del log
-   * @param {string} message - Mensaje
-   * @param {any} [data] - Datos adicionales
+   * Success log
+   * @param {string} category - Log category
+   * @param {string} message - Message
+   * @param {any} [data] - Additional data
    */
   success: (category, message, data = null) => {
     const log = formatLog('SUCCESS', category, message, colors.green);
@@ -86,10 +86,10 @@ const logger = {
   },
 
   /**
-   * Log de advertencia
-   * @param {string} category - Categoría del log
-   * @param {string} message - Mensaje
-   * @param {any} [data] - Datos adicionales
+   * Warning log
+   * @param {string} category - Log category
+   * @param {string} message - Message
+   * @param {any} [data] - Additional data
    */
   warn: (category, message, data = null) => {
     const log = formatLog('WARN', category, message, colors.yellow);
@@ -100,10 +100,10 @@ const logger = {
   },
 
   /**
-   * Log de error
-   * @param {string} category - Categoría del log
-   * @param {string} message - Mensaje
-   * @param {Error|any} [error] - Error o datos adicionales
+   * Error log
+   * @param {string} category - Log category
+   * @param {string} message - Message
+   * @param {Error|any} [error] - Error or additional data
    */
   error: (category, message, error = null) => {
     const log = formatLog('ERROR', category, message, colors.red);
@@ -118,10 +118,10 @@ const logger = {
   },
 
   /**
-   * Log de debug (solo en desarrollo)
-   * @param {string} category - Categoría del log
-   * @param {string} message - Mensaje
-   * @param {any} [data] - Datos adicionales
+   * Debug log (only in development)
+   * @param {string} category - Log category
+   * @param {string} message - Message
+   * @param {any} [data] - Additional data
    */
   debug: (category, message, data = null) => {
     if (process.env.NODE_ENV !== 'development') return;
@@ -134,11 +134,11 @@ const logger = {
   },
 
   /**
-   * Log de requests HTTP
-   * @param {string} method - Método HTTP
-   * @param {string} url - URL del request
-   * @param {number} [status] - Código de estado
-   * @param {string} [ip] - IP del cliente
+   * HTTP requests log
+   * @param {string} method - HTTP method
+   * @param {string} url - Request URL
+   * @param {number} [status] - Status code
+   * @param {string} [ip] - Client IP
    */
   request: (method, url, status = null, ip = null) => {
     let color = colors.blue;
@@ -167,17 +167,17 @@ const logger = {
   },
 
   /**
-   * Log específico para códigos de error HTTP
-   * @param {number} code - Código de error HTTP
-   * @param {string} endpoint - Endpoint que generó el error
-   * @param {string} reason - Razón del error
-   * @param {any} [data] - Datos adicionales
+   * Specific log for HTTP error codes
+   * @param {number} code - HTTP error code
+   * @param {string} endpoint - Endpoint that generated the error
+   * @param {string} reason - Error reason
+   * @param {any} [data] - Additional data
    */
   httpError: (code, endpoint, reason, data = null) => {
     let color = colors.red;
     let category = 'HTTP_ERROR';
     
-    // Clasificar por tipo de error
+    // Classify by error type
     if (code === 401) category = 'UNAUTHORIZED';
     else if (code === 403) category = 'FORBIDDEN';
     else if (code === 409) category = 'CONFLICT';
@@ -195,10 +195,10 @@ const logger = {
   },
 
   /**
-   * Log de base de datos
-   * @param {string} operation - Operación (CREATE, READ, UPDATE, DELETE)
-   * @param {string} collection - Colección/tabla
-   * @param {any} [data] - Datos adicionales
+   * Database log
+   * @param {string} operation - Operation (CREATE, READ, UPDATE, DELETE)
+   * @param {string} collection - Collection/table
+   * @param {any} [data] - Additional data
    */
   db: (operation, collection, data = null) => {
     const message = `${operation} in ${collection}`;
@@ -210,11 +210,11 @@ const logger = {
   },
 
   /**
-   * Log de autenticación
-   * @param {string} action - Acción (LOGIN, REGISTER, LOGOUT, etc.)
-   * @param {string} email - Email del usuario
-   * @param {string} result - Resultado (SUCCESS, FAILED, etc.)
-   * @param {any} [details] - Detalles adicionales
+   * Authentication log
+   * @param {string} action - Action (LOGIN, REGISTER, LOGOUT, etc.)
+   * @param {string} email - User email
+   * @param {string} result - Result (SUCCESS, FAILED, etc.)
+   * @param {any} [details] - Additional details
    */
   auth: (action, email, result, details = null) => {
     const color = result === 'SUCCESS' ? colors.green : colors.red;
@@ -227,8 +227,8 @@ const logger = {
   },
 
   /**
-   * Separador visual para logs
-   * @param {string} [title] - Título opcional del separador
+   * Visual separator for logs
+   * @param {string} [title] - Optional separator title
    */
   separator: (title = null) => {
     if (process.env.NODE_ENV !== 'development') return;
@@ -242,9 +242,9 @@ const logger = {
   },
 
   /**
-   * Log de inicio de servidor
-   * @param {number} port - Puerto del servidor
-   * @param {string} [docsUrl] - URL de documentación
+   * Server start log
+   * @param {number} port - Server port
+   * @param {string} [docsUrl] - Documentation URL
    */
   server: (port, docsUrl = null) => {
     logger.separator('ToDo Center Backend');

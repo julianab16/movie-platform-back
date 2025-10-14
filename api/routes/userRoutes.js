@@ -1,23 +1,26 @@
 import express from 'express';
 import UserController from '../controllers/UserController.js';
+import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// CRUD básico (heredado de GlobalController)
+// Public routes
 router.get("/", UserController.getAll);
 router.get("/:id", UserController.read);
 router.post("/", UserController.create);
-router.put("/:id", UserController.update);
-router.delete("/:id", UserController.delete);
 
-// Rutas específicas de autenticación
+// Authentication routes (public)
 router.post("/register", UserController.registerUser);
 router.post("/login", UserController.loginUser);
-router.post("/logout", UserController.logoutUser);
+router.post("/logout", authenticateToken, UserController.logoutUser);
 
-// Rutas protegidas (requieren autenticación)
-router.get("/me", UserController.getProfile);
-router.put("/me", UserController.updateProfile);
-router.delete("/me", UserController.deleteAccount);
+// Protected routes (require authentication)
+router.get("/me", authenticateToken, UserController.getProfile);
+router.put("/me", authenticateToken, UserController.updateProfile);
+router.delete("/me", authenticateToken, UserController.deleteAccount);
+
+// Protected CRUD operations
+router.put("/:id", authenticateToken, UserController.update);
+router.delete("/:id", authenticateToken, UserController.delete);
 
 export default router;

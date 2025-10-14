@@ -1,5 +1,5 @@
-const GlobalDAO = require("./GlobalDAO");
-const bcrypt = require('bcryptjs');
+import GlobalDAO from "./GlobalDAO.js";
+import bcrypt from 'bcryptjs';
 
 class UserDAO extends GlobalDAO {
   constructor() {
@@ -61,7 +61,7 @@ class UserDAO extends GlobalDAO {
     });
   }
 
-    // Método para eliminar usuario
+  // Method to delete user
   async deleteById(id) {
     try {
       return await this.findByIdAndDelete(id);
@@ -72,4 +72,4 @@ class UserDAO extends GlobalDAO {
   }
 }
 
-module.exports = new UserDAO();
+export default new UserDAO();
