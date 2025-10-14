@@ -1,6 +1,6 @@
 import { body, validationResult } from 'express-validator';
 
-// Middleware para manejar errores de validación
+// Middleware to handle validation errors
 const validateRequest = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -13,7 +13,7 @@ const validateRequest = (req, res, next) => {
   next();
 };
 
-// Validaciones para registro
+// Validations for registration
 const validateRegister = [
   body('nombres')
     .trim()
@@ -49,24 +49,24 @@ const validateRegister = [
     })
 ];
 
-// Validaciones para login
+// Validations for login
 const validateLogin = [
   body('correo')
     .isEmail()
     .withMessage('Correo electrónico inválido')
-    .customSanitizer(value => value.toLowerCase()), // Solo minúsculas
+    .customSanitizer(value => value.toLowerCase()), // Only lowercase
   
   body('contrasena')
     .notEmpty()
     .withMessage('Contraseña es requerida')
 ];
 
-// Validaciones para password reset
+// Validations for password reset
 const validatePasswordResetRequest = [
   body('correo')
     .isEmail()
     .withMessage('Correo electrónico inválido')
-    .customSanitizer(value => value.toLowerCase()) // Solo minúsculas
+    .customSanitizer(value => value.toLowerCase()) // Only lowercase
 ];
 
 const validatePasswordReset = [

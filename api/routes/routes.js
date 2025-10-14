@@ -1,4 +1,3 @@
-// api/routes/routes.js
 import express from "express";
 import userRoutes from "./userRoutes.js";
 import moviesRoutes from "./moviesRoutes.js";

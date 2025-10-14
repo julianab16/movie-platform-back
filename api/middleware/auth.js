@@ -15,11 +15,11 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
-    // Usar la función verifyToken del utils/jwt.js
+    // Use the verifyToken function from utils/jwt.js
     const decoded = await jwt.verifyToken(token);
     
     logger.debug('JWT', `Token validado para usuario: ${decoded.correo}`, decoded);
-    req.user = decoded; // Contiene userId y correo
+    req.user = decoded; // Contains userId and email
     next();
     
   } catch (error) {
@@ -31,21 +31,21 @@ const authenticateToken = async (req, res, next) => {
       case 'TOKEN_EXPIRED':
         message = 'Token expirado. Inicia sesión nuevamente';
         status = 401;
-        logLevel = 'info'; // Expiración es normal, no una amenaza
+        logLevel = 'info'; // Expiration is normal, not a threat
         break;
       case 'TOKEN_BLACKLISTED':
         message = 'Token revocado. Inicia sesión nuevamente';
         status = 401;
-        logLevel = 'warn'; // Token revocado puede ser sospechoso
+        logLevel = 'warn'; // Revoked token may be suspicious
         break;
       case 'TOKEN_INVALID':
         message = 'Token inválido o malformado';
         status = 403;
-        logLevel = 'warn'; // Token malformado es sospechoso
+        logLevel = 'warn'; // Malformed token is suspicious
         break;
     }
     
-    // Log con el nivel apropiado
+    // Log with appropriate level
     const logData = { 
       code: status, 
       endpoint: req.originalUrl, 
@@ -66,14 +66,14 @@ const authenticateToken = async (req, res, next) => {
   }
 };
 
-// MIDDLEWARE PRE-SAVE: Hash de contraseña con bcrypt (min 10 salt rounds)
+// MIDDLEWARE PRE-SAVE: Password hash with bcrypt (min 10 salt rounds)
 const preSave = (schema) => {
   schema.pre('save', async function(next) {
-    // Solo hashear si la contraseña es nueva o fue modificada
+    // Only hash if the password is new or was modified
     if (!this.isModified('contrasena')) return next();
     
     try {
-      // Hash con 12 salt rounds (más que el mínimo de 10)
+      // Hash with 12 salt rounds (more than the minimum of 10)
       this.contrasena = bcrypt.hash(this.contrasena, 12);
       next();
     } catch (error) {

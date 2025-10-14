@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Validar que las variables de entorno existan
+// Validate that environment variables exist
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -13,10 +13,10 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Las credenciales de Supabase no están configuradas correctamente');
 }
 
-// Cliente público (para operaciones del lado del cliente)
+// Public client (for client-side operations)
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Cliente con privilegios administrativos (para operaciones del servidor)  
+// Client with administrative privileges (for server-side operations)  
 export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   auth: {
     autoRefreshToken: false,
@@ -24,7 +24,7 @@ export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   }
 });
 
-// Función para verificar la conexión
+// Function to verify the connection
 export const testConnection = async () => {
   try {
     const { data, error } = await supabase.from('users').select('*').limit(1);

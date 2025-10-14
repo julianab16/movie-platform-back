@@ -1,4 +1,4 @@
-import GlobalDAO from './GlobalDAO.js';
+import GlobalDAO from "./GlobalDAO.js";
 import { supabase } from '../config/supabase.js';
 
 class CommentsDAO extends GlobalDAO {

@@ -1,26 +1,22 @@
 import express from 'express';
-const router = express.Router();
 import CommentsController from '../controllers/CommentsController.js';
+import { authenticateToken } from '../middleware/auth.js';
 
-// Create a new comment
-router.post('/', CommentsController.createComment);
+const router = express.Router();
 
-// Get all comments (with pagination)
+// Public routes (GET only)
 router.get('/', CommentsController.getAllComments);
 
-// Get comment by ID
-router.get('/:id', CommentsController.getCommentById);
-
-// Get comments by movie ID
+// Specific routes MUST come before generic /:id route
 router.get('/movie/:movieId', CommentsController.getCommentsByMovie);
-
-// Get comments by user ID
 router.get('/user/:userId', CommentsController.getCommentsByUser);
 
-// Update comment
-router.put('/:id', CommentsController.updateComment);
+// Generic ID route comes after specific routes
+router.get('/:id', CommentsController.getCommentById);
 
-// Delete comment
-router.delete('/:id', CommentsController.deleteComment);
+// Protected routes (require authentication)
+router.post('/', authenticateToken, CommentsController.createComment);
+router.put('/:id', authenticateToken, CommentsController.updateComment);
+router.delete('/:id', authenticateToken, CommentsController.deleteComment);
 
 export default router;

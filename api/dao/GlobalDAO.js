@@ -97,4 +97,3 @@ class GlobalDAO {
 }
 
 export default GlobalDAO;
-// module.exports = GlobalDAO; 

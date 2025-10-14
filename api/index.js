@@ -2,27 +2,32 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import { testConnection } from './config/supabase.js';
+import routes from './routes/routes.js';
 import cors from 'cors';
-import router from './routes/routes.js';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+//configuración de cors
+app.use(cors({
+  origin: 'http://localhost:5173', // tu frontend
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true
+}));
+
 // Middlewares
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use('/api/v1', router);
-app.use(cors({
-  origin: 'http://localhost:5173', // frontend de Vite
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-// Verificar conexión con Supabase al iniciar
+
+// Verify connection with Supabase on startup
 testConnection();
 
-// Ruta de prueba
+// API Routes
+app.use('/api/v1', routes);
+
+// Test route
 app.get('/', (req, res) => {
   res.json({ 
     message: 'API funcionando correctamente',
@@ -30,12 +35,13 @@ app.get('/', (req, res) => {
   });
 });
 
-// Ruta para verificar tablas disponibles
+// Route to check available tables
 app.get('/check-tables', async (req, res) => {
   const { supabase } = await import('./config/supabase.js');
   
   const commonTables = [
-    'users', 'usuarios', 'products', 'productos', 'orders', 
+    'users', 'usuarios', 'movies', 'peliculas', 'comments', 'comentarios',
+    'favorites', 'favoritos', 'products', 'productos', 'orders', 
     'pedidos', 'categories', 'categorias', 'clientes', 'ventas',
     'inventory', 'inventario', 'items', 'articulos'
   ];
@@ -58,7 +64,7 @@ app.get('/check-tables', async (req, res) => {
         });
       }
     } catch (err) {
-      // Tabla no existe
+      // Table does not exist
     }
   }
 
@@ -70,7 +76,26 @@ app.get('/check-tables', async (req, res) => {
   });
 });
 
-// Iniciar servidor
+// Middleware for 404 - Not Found (must be after all routes)
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'Ruta no encontrada',
+    path: req.originalUrl
+  });
+});
+
+// Global error handler (must be last middleware)
+app.use((err, req, res, next) => {
+  console.error('Error:', err.stack);
+  res.status(err.status || 500).json({
+    success: false,
+    message: err.message || 'Error interno del servidor',
+    error: process.env.NODE_ENV === 'development' ? err.stack : undefined
+  });
+});
+
+// Start server
 app.listen(PORT, () => {
   console.log('═══════════════════════════════════════');
   console.log(`🚀 Servidor corriendo en puerto ${PORT}`);

@@ -13,7 +13,7 @@ class MoviesDAO extends GlobalDAO {
 
   // Method to search movies by name (partial search)
   async searchByNombre(nombre) {
-  const { data, error } = await supabase
+    const { data, error } = await supabase
       .from(this.tableName)
       .select('*')
       .ilike('nombre', `%${nombre}%`)

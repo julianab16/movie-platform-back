@@ -1,6 +1,6 @@
 /**
- * @fileoverview Controlador para gestión de películas favoritas
- * Maneja operaciones CRUD para favoritos de usuarios
+ * @fileoverview Controller for managing favorite movies
+ * Handles CRUD operations for user favorites
  * 
  * @module controllers/FavoritesController
  * @since 1.0.0
@@ -12,7 +12,7 @@ import logger from '../utils/logger.js';
 class FavoritesController {
   
   /**
-   * GET /api/favorites - Obtener todas las películas favoritas del usuario autenticado
+   * GET /api/favorites - Get all favorite movies of authenticated user
    * @param {Object} req - Request object
    * @param {Object} res - Response object
    */
@@ -30,7 +30,7 @@ class FavoritesController {
 
       logger.info('FAVORITES_CONTROLLER', 'Obteniendo favoritos del usuario', { userId });
 
-      // Obtener favoritos usando el DAO
+      // Get favorites using the DAO
       const favorites = await FavoritesDAO.getFavoritesByUserId(userId);
 
       logger.success('FAVORITES_CONTROLLER', 'Favoritos obtenidos exitosamente', { 
@@ -57,7 +57,7 @@ class FavoritesController {
   }
 
   /**
-   * POST /api/favorites - Agregar película a favoritos
+   * POST /api/favorites - Add movie to favorites
    * @param {Object} req - Request object
    * @param {Object} res - Response object
    */
@@ -75,43 +75,24 @@ class FavoritesController {
 
       const {
         movieId,
-        movieTitle,
-        moviePosterUrl,
-        movieReleaseDate,
-        movieRating,
-        movieGenre,
-        // Support Spanish field names as fallback
-        movie_id,
-        movie_title,
-        movie_poster_url,
-        movie_release_date,
-        movie_rating,
-        movie_genre
+        movie_id
       } = req.body;
 
       // Map fields (English preferred with Spanish fallback)
-      const movieData = {
-        movieId: movieId || movie_id,
-        movieTitle: movieTitle || movie_title,
-        moviePosterUrl: moviePosterUrl || movie_poster_url,
-        movieReleaseDate: movieReleaseDate || movie_release_date,
-        movieRating: movieRating || movie_rating,
-        movieGenre: movieGenre || movie_genre
-      };
+      const finalMovieId = movieId || movie_id;
 
       // Validation
-      if (!movieData.movieId || !movieData.movieTitle) {
+      if (!finalMovieId) {
         return res.status(400).json({
           success: false,
-          message: "Movie ID and title are required",
-          message_es: "ID y título de la película son requeridos"
+          message: "Movie ID is required",
+          message_es: "ID de la película es requerido"
         });
       }
 
       logger.info('FAVORITES_CONTROLLER', 'Agregando película a favoritos', { 
         userId, 
-        movieId: movieData.movieId,
-        movieTitle: movieData.movieTitle 
+        movieId: finalMovieId
       });
 
       // Check if movie is already in favorites
@@ -119,7 +100,7 @@ class FavoritesController {
         .from('favorites')
         .select('id')
         .eq('user_id', userId)
-        .eq('movie_id', movieData.movieId)
+        .eq('movie_id', finalMovieId)
         .single();
 
       if (checkError && checkError.code !== 'PGRST116') {
@@ -139,18 +120,12 @@ class FavoritesController {
         });
       }
 
-      // Add to favorites
+      // Add to favorites (only user_id and movie_id)
       const { data: newFavorite, error: insertError } = await supabase
         .from('favorites')
         .insert([{
           user_id: userId,
-          movie_id: movieData.movieId,
-          movie_title: movieData.movieTitle,
-          movie_poster_url: movieData.moviePosterUrl,
-          movie_release_date: movieData.movieReleaseDate,
-          movie_rating: movieData.movieRating,
-          movie_genre: movieData.movieGenre,
-          added_at: new Date().toISOString()
+          movie_id: finalMovieId
         }])
         .select()
         .single();
@@ -167,7 +142,7 @@ class FavoritesController {
       logger.success('FAVORITES_CONTROLLER', 'Película agregada a favoritos', { 
         userId, 
         favoriteId: newFavorite.id,
-        movieTitle: movieData.movieTitle 
+        movieId: finalMovieId
       });
 
       res.status(201).json({
@@ -188,7 +163,7 @@ class FavoritesController {
   }
 
   /**
-   * DELETE /api/favorites/:movieId - Remover película de favoritos
+   * DELETE /api/favorites/:movieId - Remove movie from favorites
    * @param {Object} req - Request object
    * @param {Object} res - Response object
    */
@@ -221,7 +196,7 @@ class FavoritesController {
       // Check if favorite exists
       const { data: existingFavorite, error: checkError } = await supabase
         .from('favorites')
-        .select('id, movie_title')
+        .select('id')
         .eq('user_id', userId)
         .eq('movie_id', movieId)
         .single();
@@ -261,8 +236,7 @@ class FavoritesController {
 
       logger.success('FAVORITES_CONTROLLER', 'Película removida de favoritos', { 
         userId, 
-        movieId,
-        movieTitle: existingFavorite.movie_title 
+        movieId
       });
 
       res.status(200).json({
@@ -282,7 +256,7 @@ class FavoritesController {
   }
 
   /**
-   * GET /api/favorites/check/:movieId - Verificar si película está en favoritos
+   * GET /api/favorites/check/:movieId - Check if movie is in favorites
    * @param {Object} req - Request object
    * @param {Object} res - Response object
    */
@@ -358,7 +332,7 @@ class FavoritesController {
   }
 
   /**
-   * GET /api/favorites/stats - Obtener estadísticas de favoritos del usuario
+   * GET /api/favorites/stats - Get user favorites statistics
    * @param {Object} req - Request object
    * @param {Object} res - Response object
    */
@@ -462,7 +436,7 @@ class FavoritesController {
   }
 
   /**
-   * DELETE /api/favorites - Limpiar todos los favoritos del usuario
+   * DELETE /api/favorites - Clear all user favorites
    * @param {Object} req - Request object
    * @param {Object} res - Response object
    */
