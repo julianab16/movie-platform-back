@@ -70,7 +70,12 @@ async updateProfile(req, res) {
         message: "Debes proporcionar al menos un campo a actualizar"
       });
     }
-
+     if (contrasena && !confirmacion) {
+      return res.status(400).json({
+        success: false,
+        message: "Debe incluir el campo 'confirmacion' junto con la nueva contraseña",
+      });
+    }
     const updateData = {};
 
     if (nombres) updateData.nombres = nombres;
@@ -89,25 +94,45 @@ async updateProfile(req, res) {
     }
 
     // 4️⃣ Validar y encriptar contraseña si se envía
-    if (contrasena) {
-      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
-      if (!passwordRegex.test(contrasena)) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "La contraseña debe tener al menos 8 caracteres, incluir mayúscula, minúscula y número"
-        });
-      }
-      if (confirmacion && contrasena !== confirmacion) {
-        return res.status(400).json({
-          success: false,
-          message: "La confirmación de contraseña no coincide"
-        });
-      }
+    
+if (contrasena) {
+  // Evitar hashear una contraseña que ya está hasheada
+  const looksHashed = /^\$2[aby]\$/.test(contrasena);
 
-      const hash = await bcrypt.hash(contrasena, 10);
-      updateData.contrasena = hash;
+  if (!looksHashed) {
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+    if (!passwordRegex.test(contrasena)) {
+      return res.status(400).json({
+        success: false,
+        message: "La contraseña debe tener al menos 8 caracteres, incluir mayúscula, minúscula y número",
+      });
     }
+    if (confirmacion && contrasena !== confirmacion) {
+      return res.status(400).json({
+        success: false,
+        message: "La confirmación de contraseña no coincide",
+      });
+    }
+
+    const hash = await bcrypt.hash(contrasena, 10);
+    updateData.contrasena = hash;
+  } else {
+    console.log("⚠️ Contraseña ya hasheada, no se vuelve a hashear.");
+  }
+}
+// Actualizar contraseña también en Supabase Auth
+const { error: authUpdateError } = await supabase.auth.admin.updateUserById(userId, {
+  password: contrasena
+});
+
+if (authUpdateError) {
+  console.error("Error al actualizar contraseña en Supabase Auth:", authUpdateError);
+  return res.status(500).json({
+    success: false,
+    message: "No se pudo actualizar la contraseña en Supabase Auth"
+  });
+}
+
 
     updateData.updated_at = new Date().toISOString();
     const userCheck = await supabase
@@ -434,6 +459,50 @@ async loginUser(req, res) {
     res.status(500).json({
       success: false,
       message: "Error interno del servidor",
+    });
+  }
+}
+// POST /api/v1/users/logout
+async logoutUser(req, res) {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader) {
+      return res.status(400).json({
+        success: false,
+        message: "No se proporcionó el token de autorización"
+      });
+    }
+
+    // Extraer token (formato: Bearer <token>)
+    const token = authHeader.split(" ")[1];
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        message: "Formato de token inválido"
+      });
+    }
+
+    // Cerrar sesión usando Supabase Auth
+    const { error } = await supabase.auth.signOut(token);
+
+    if (error) {
+      console.error("Error al cerrar sesión:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Error al cerrar sesión"
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Sesión cerrada exitosamente"
+    });
+  } catch (error) {
+    console.error("Error general en logoutUser:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error interno del servidor"
     });
   }
 }

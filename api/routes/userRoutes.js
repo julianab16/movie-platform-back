@@ -6,7 +6,7 @@ const router = express.Router();
 // Rutas públicas
 router.post("/register", (req, res) => UserController.registerUser(req, res));
 router.post("/login", (req, res) => UserController.loginUser(req, res));
-
+router.post("/logout", (req, res) => UserController.logoutUser(req, res));
 // Rutas protegidas (si luego añades autenticación con token)
 router.get("/", (req, res) => UserController.getAllUsers(req, res));
 router.get("/me", (req, res) => UserController.getProfile(req, res));
