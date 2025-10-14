@@ -1,7 +1,6 @@
 import { supabase } from '../config/supabase.js';
 import GlobalController from './GlobalController.js';
 import UserDAO from '../dao/UserDAO.js';
-import User from '../models/User.js';
 import jwt from '../utils/jwt.js';
 import bcrypt from 'bcryptjs';
 import logger from '../utils/logger.js';
@@ -14,47 +13,35 @@ class UserController extends GlobalController {
   // GET /users/me - Get authenticated user profile
   async getProfile(req, res) {
     try {
-      console.log('req.user completo:', req.user); // Debug
-      console.log('req.headers:', req.headers.authorization); // Debug
-      
-      const userId = req.user?.id || req.user?.userId || req.user?._id;
-      console.log("Buscando usuario con ID:", userId);
-      
-      if (!userId) {
-        return res.status(400).json({
-          success: false,
-          message: "ID de usuario no encontrado en el token"
-        });
-      }
-      
-      const user = await this.dao.getById(userId);
-      console.log("Usuario encontrado:", user);
-      
-      if (!user) {
-        return res.status(404).json({ 
+      const authHeader = req.headers.authorization;
+      if (!authHeader) {
+        return res.status(401).json({ 
           success: false, 
-          message: "Usuario no encontrado" 
+          message: "Token no proporcionado" 
         });
       }
 
-      const profile = {
-        id: user._id,
-        firstName: user.nombres,
-        lastName: user.apellidos,
-        age: user.edad,
-        email: user.correo,
-        createdAt: user.createdAt
-      };
+      const token = authHeader.split(" ")[1];
+      const { data, error } = await supabase.auth.getUser(token);
 
-      res.status(200).json({
+      if (error || !data.user) {
+        return res.status(401).json({ 
+          success: false, 
+          message: "ID de usuario no encontrado en el token" 
+        });
+      }
+
+      return res.status(200).json({
         success: true,
-        data: profile
+        message: "Usuario autenticado correctamente",
+        user: data.user
       });
+
     } catch (error) {
-      console.error("Error al obtener perfil:", error);
-      res.status(500).json({
-        success: false,
-        message: "Error interno del servidor"
+      console.error("Error al obtener usuario:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: "Error interno del servidor" 
       });
     }
   }
@@ -62,167 +49,178 @@ class UserController extends GlobalController {
   // PUT /users/me - Update authenticated user profile
   async updateProfile(req, res) {
     try {
-      console.log('=== DEBUG UPDATE PROFILE ===');
-      console.log('req.user:', req.user);
-      
-      const userId = req.user?.id || req.user?.userId || req.user?._id;
-      console.log('userId extraído:', userId);
-      console.log('tipo de userId:', typeof userId);
-      
-      const { firstName, lastName, age, email } = req.body;
-      console.log('Body recibido:', req.body);
+      let userId = req.user?.id || req.user?.userId || req.user?._id;
+      const authHeader = req.headers.authorization;
 
-      // Basic validations
-      if (!firstName || !lastName || !age || !email) {
+      if ((!userId || userId === "undefined") && authHeader) {
+        const token = authHeader.split(" ")[1];
+        const { data: { user }, error } = await supabase.auth.getUser(token);
+        if (error || !user) {
+          return res.status(401).json({ 
+            success: false, 
+            message: "Token inválido" 
+          });
+        }
+        userId = user.id;
+      }
+
+      if (!userId) {
+        return res.status(401).json({ 
+          success: false, 
+          message: "Usuario no autenticado" 
+        });
+      }
+
+      const { nombres, apellidos, edad, correo, contrasena, confirmacion } = req.body;
+
+      // No permitir modificar el correo
+      if (correo !== undefined) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "El correo no se puede modificar" 
+        });
+      }
+
+      // Validar que haya al menos un campo editable
+      if (!nombres && !apellidos && !edad && !contrasena) {
         return res.status(400).json({
           success: false,
-          message: "Todos los campos son requeridos"
+          message: "Debes proporcionar al menos un campo a actualizar"
         });
       }
 
-      // Validate minimum age
-      if (age < 13) {
-        return res.status(400).json({
-          success: false,
-          message: "La edad mínima es 13 años"
-        });
+      const updateData = {};
+
+      if (nombres) updateData.nombres = nombres;
+      if (apellidos) updateData.apellidos = apellidos;
+
+      // Validar edad
+      if (edad !== undefined) {
+        const numEdad = parseInt(edad);
+        if (isNaN(numEdad) || numEdad < 13) {
+          return res.status(400).json({
+            success: false,
+            message: "La edad mínima permitida es 13 años"
+          });
+        }
+        updateData.edad = numEdad;
       }
 
-      // Validate email format (basic)
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        return res.status(400).json({
-          success: false,
-          message: "Formato de email inválido"
-        });
+      // Validar y encriptar contraseña si se envía
+      if (contrasena) {
+        const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+        if (!passwordRegex.test(contrasena)) {
+          return res.status(400).json({
+            success: false,
+            message: "La contraseña debe tener al menos 8 caracteres, incluir mayúscula, minúscula y número"
+          });
+        }
+        if (confirmacion && contrasena !== confirmacion) {
+          return res.status(400).json({
+            success: false,
+            message: "La confirmación de contraseña no coincide"
+          });
+        }
+
+        const hash = await bcrypt.hash(contrasena, 10);
+        updateData.contrasena = hash;
       }
 
-      // Check if email is already in use by another user
-      const existingUser = await this.dao.findByEmail(email);
-      console.log('Usuario existente con email:', existingUser);
-      
-      if (existingUser && existingUser._id.toString() !== userId) {
-        return res.status(409).json({
-          success: false,
-          message: "El email ya está registrado por otro usuario"
-        });
-      }
+      updateData.updated_at = new Date().toISOString();
 
-      // Map input fields (English) to model (Spanish)
-      const updateData = {
-        nombres: firstName,
-        apellidos: lastName,
-        edad: parseInt(age),
-        correo: email,
-        updatedAt: new Date()
-      };
-      console.log('Datos a actualizar:', updateData);
+      // Actualizar en la base de datos
+      const { data: updatedUser, error: updateError } = await supabase
+        .from("users")
+        .update(updateData)
+        .eq("id", userId)
+        .select()
+        .single();
 
-      const updatedUser = await this.dao.update(userId, updateData);
-      console.log('Usuario actualizado:', updatedUser);
+      if (updateError) throw updateError;
 
       if (!updatedUser) {
-        console.log('❌ update retornó null/undefined');
         return res.status(404).json({
           success: false,
-          message: "Usuario no encontrado"
+          message: "Usuario no encontrado o no autorizado"
         });
       }
 
-      // Map response from model (Spanish) to English
-      const response = {
-        id: updatedUser.id,
-        firstName: updatedUser.nombres,
-        lastName: updatedUser.apellidos,
-        age: updatedUser.edad,
-        email: updatedUser.correo,
-        createdAt: updatedUser.createdAt,
-        updatedAt: updatedUser.updatedAt
-      };
-
+      // Respuesta final
       res.status(200).json({
         success: true,
-        data: response,
-        message: "Perfil actualizado exitosamente"
+        message: "Perfil actualizado exitosamente",
+        data: {
+          id: updatedUser.id,
+          nombres: updatedUser.nombres,
+          apellidos: updatedUser.apellidos,
+          edad: updatedUser.edad,
+          correo: updatedUser.correo,
+          updatedAt: updatedUser.updated_at
+        }
       });
-    } catch (error) {
-      console.error("Error al actualizar perfil:", error);
-      res.status(500).json({
-        success: false,
-        message: "Error interno del servidor"
+    } catch (err) {
+      console.error("Error al actualizar perfil:", err);
+      res.status(500).json({ 
+        success: false, 
+        message: "Error interno del servidor" 
       });
     }
   }
 
-  // DELETE /users/me - Delete authenticated user account
+  // DELETE /users/me - Delete account
   async deleteAccount(req, res) {
     try {
-      console.log('=== DEBUG DELETE ACCOUNT ===');
-      console.log('req.user:', req.user);
-      console.log('req.body:', req.body);
-      
       const userId = req.user?.id || req.user?.userId || req.user?._id;
-      console.log('userId extraído:', userId);
-      
       const { password, confirmText } = req.body;
-      console.log('Password recibido:', password ? '***' : 'undefined');
-      console.log('ConfirmText recibido:', confirmText);
 
-      // Validate that password and confirmation are provided
       if (!password || !confirmText) {
-        console.log('❌ Faltan password o confirmText');
-        return res.status(400).json({
-          success: false,
-          message: "Contraseña y confirmación son requeridas"
+        return res.status(400).json({ 
+          success: false, 
+          message: "Contraseña y confirmación son requeridas" 
         });
       }
 
-      // Validate that confirmation text is correct
       if (confirmText !== "ELIMINAR") {
-        console.log('❌ ConfirmText incorrecto:', confirmText);
-        return res.status(400).json({
-          success: false,
-          message: "Debe escribir 'ELIMINAR' para confirmar"
+        return res.status(400).json({ 
+          success: false, 
+          message: "Debe escribir 'ELIMINAR' para confirmar" 
         });
       }
 
-      // Get user to verify password
-      const user = await this.dao.getById(userId);
-      console.log('Usuario encontrado:', user ? 'SÍ' : 'NO');
-      
-      if (!user) {
-        console.log('❌ Usuario no encontrado');
-        return res.status(404).json({
-          success: false,
-          message: "Usuario no encontrado"
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (userError) {
+        return res.status(404).json({ 
+          success: false, 
+          message: "Usuario no encontrado" 
         });
       }
 
-      // Verify password using model method
-      console.log('Verificando contraseña...');
-      const isValidPassword = await user.comparePassword(password);
-      console.log('Contraseña válida:', isValidPassword);
-      
+      const isValidPassword = await bcrypt.compare(password, user.contrasena);
       if (!isValidPassword) {
-        console.log('❌ Contraseña incorrecta');
-        return res.status(401).json({
-          success: false,
-          message: "Contraseña incorrecta"
+        return res.status(401).json({ 
+          success: false, 
+          message: "Contraseña incorrecta" 
         });
       }
 
-      // Delete user
-      console.log('Eliminando usuario...');
-      const deleteResult = await this.dao.delete(userId);
-      console.log('Resultado eliminación:', deleteResult);
+      const { error: deleteError } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', userId);
 
-      console.log('✅ Usuario eliminado exitosamente');
+      if (deleteError) throw deleteError;
+
       res.status(204).send();
     } catch (error) {
       console.error("Error al eliminar cuenta:", error);
-      res.status(500).json({
-        success: false,
-        message: "Error interno del servidor"
+      res.status(500).json({ 
+        success: false, 
+        message: "Error interno del servidor" 
       });
     }
   }
@@ -275,8 +273,27 @@ class UserController extends GlobalController {
         });
       }
 
-      // Check if user already exists
-      const existingUser = await User.findOne({ email: userData.email });
+      // Password strength validation
+      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+      if (!passwordRegex.test(userData.password)) {
+        return res.status(400).json({
+          success: false,
+          message: "Password must be at least 8 characters with uppercase, lowercase and number",
+          message_es: "La contraseña debe tener al menos 8 caracteres con mayúscula, minúscula y número"
+        });
+      }
+
+      // Check if user already exists in Supabase
+      const { data: existingUser, error: checkError } = await supabase
+        .from('users')
+        .select('id, correo')
+        .eq('correo', userData.email)
+        .single();
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        throw checkError;
+      }
+
       if (existingUser) {
         return res.status(409).json({
           success: false,
@@ -285,21 +302,61 @@ class UserController extends GlobalController {
         });
       }
 
-      // Create new user using User model
-      const newUser = new User(userData);
-      const savedUser = await newUser.save();
+      // Hash password
+      const hashedPassword = await bcrypt.hash(userData.password, 10);
+
+      // Register user in Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: userData.email,
+        password: userData.password,
+      });
+
+      if (authError) {
+        logger.error('USER_CONTROLLER', 'Error en Supabase Auth', authError);
+        throw authError;
+      }
+
+      if (!authData?.user) {
+        return res.status(202).json({
+          success: true,
+          message: "Registration successful. Please verify your email to activate the account.",
+          message_es: "Registro exitoso. Por favor verifica tu correo electrónico para activar la cuenta."
+        });
+      }
+
+      // Insert user data in custom users table
+      const { data: newUser, error: userError } = await supabase
+        .from("users")
+        .insert([
+          {
+            id: authData.user.id,
+            nombres: userData.firstName,
+            apellidos: userData.lastName,
+            edad: parseInt(userData.age),
+            correo: userData.email,
+            contrasena: hashedPassword,
+            created_at: new Date()
+          }
+        ])
+        .select()
+        .single();
+
+      if (userError) {
+        logger.error('USER_CONTROLLER', 'Error insertando usuario', userError);
+        throw userError;
+      }
 
       logger.success('USER_CONTROLLER', 'Usuario registrado exitosamente', { 
-        userId: savedUser.id, 
-        email: savedUser.email 
+        userId: newUser.id, 
+        email: newUser.correo 
       });
 
       // Generate JWT token
       const token = jwt.generateToken({
-        id: savedUser.id,
-        email: savedUser.email,
-        firstName: savedUser.firstName,
-        lastName: savedUser.lastName
+        id: newUser.id,
+        email: newUser.correo,
+        firstName: newUser.nombres,
+        lastName: newUser.apellidos
       });
 
       // Return success response with token
@@ -309,12 +366,12 @@ class UserController extends GlobalController {
         message_es: "Usuario registrado exitosamente",
         data: {
           user: {
-            id: savedUser.id,
-            firstName: savedUser.firstName,
-            lastName: savedUser.lastName,
-            age: savedUser.age,
-            email: savedUser.email,
-            createdAt: savedUser.createdAt
+            id: newUser.id,
+            firstName: newUser.nombres,
+            lastName: newUser.apellidos,
+            age: newUser.edad,
+            email: newUser.correo,
+            createdAt: newUser.created_at
           },
           token: token
         }
@@ -330,11 +387,16 @@ class UserController extends GlobalController {
     }
   }
 
-
-  // GET /users - Obtener todos los usuarios
+  // GET /users - Get all users
   async getAllUsers(req, res) {
     try {
-      const users = await this.dao.getAll();
+      const { data: users, error } = await supabase
+        .from('users')
+        .select('id, nombres, apellidos, edad, correo, created_at')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
       res.status(200).json({
         success: true,
         count: users.length,
@@ -375,9 +437,14 @@ class UserController extends GlobalController {
         });
       }
 
-      // Find user by email
-      const user = await User.findOne({ email: loginData.email });
-      if (!user) {
+      // Find user by email in Supabase
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('correo', loginData.email)
+        .single();
+
+      if (userError || !user) {
         logger.warn('USER_CONTROLLER', 'Usuario no encontrado', { email: loginData.email });
         return res.status(401).json({
           success: false,
@@ -386,38 +453,10 @@ class UserController extends GlobalController {
         });
       }
 
-      // Check if account is locked
-      if (user.isAccountLocked()) {
-        const lockTime = Math.ceil((user.lockedUntil - Date.now()) / 1000 / 60);
-        logger.warn('USER_CONTROLLER', 'Cuenta bloqueada', { 
-          email: loginData.email, 
-          lockTime: lockTime 
-        });
-        
-        return res.status(423).json({
-          success: false,
-          message: `Account locked. Try again in ${lockTime} minutes`,
-          message_es: `Cuenta bloqueada. Intente nuevamente en ${lockTime} minutos`
-        });
-      }
-
       // Verify password
-      const isValidPassword = await user.comparePassword(loginData.password);
+      const isValidPassword = await bcrypt.compare(loginData.password, user.contrasena);
       if (!isValidPassword) {
-        // Increment failed attempts
-        user.failedAttempts = (user.failedAttempts || 0) + 1;
-        
-        // Lock account if too many failed attempts
-        if (user.failedAttempts >= 5) {
-          user.lockedUntil = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
-          logger.warn('USER_CONTROLLER', 'Cuenta bloqueada por intentos fallidos', { 
-            email: loginData.email, 
-            attempts: user.failedAttempts 
-          });
-        }
-        
-        await user.save();
-
+        logger.warn('USER_CONTROLLER', 'Contraseña incorrecta', { email: loginData.email });
         return res.status(401).json({
           success: false,
           message: "Invalid credentials",
@@ -425,23 +464,17 @@ class UserController extends GlobalController {
         });
       }
 
-      // Reset failed attempts and update last login
-      user.failedAttempts = 0;
-      user.lockedUntil = undefined;
-      user.lastLogin = new Date();
-      await user.save();
-
       // Generate JWT token
       const token = jwt.generateToken({
         id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName
+        email: user.correo,
+        firstName: user.nombres,
+        lastName: user.apellidos
       });
 
       logger.success('USER_CONTROLLER', 'Login exitoso', { 
         userId: user.id, 
-        email: user.email 
+        email: user.correo 
       });
 
       // Return success response
@@ -452,11 +485,10 @@ class UserController extends GlobalController {
         data: {
           user: {
             id: user.id,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            age: user.age,
-            email: user.email,
-            lastLogin: user.lastLogin
+            firstName: user.nombres,
+            lastName: user.apellidos,
+            age: user.edad,
+            email: user.correo
           },
           token: token
         }
@@ -472,7 +504,7 @@ class UserController extends GlobalController {
     }
   }
 
-  // POST /users/logout - User logout (invalidate token)
+  // POST /users/logout - User logout
   async logoutUser(req, res) {
     try {
       const token = req.headers.authorization?.replace('Bearer ', '');
@@ -507,8 +539,6 @@ class UserController extends GlobalController {
       });
     }
   }
-
-
 }
 
-export default new UserController();  
+export default new UserController();
