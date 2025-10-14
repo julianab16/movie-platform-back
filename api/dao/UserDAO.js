@@ -60,6 +60,16 @@ class UserDAO extends GlobalDAO {
       last_login: new Date()
     });
   }
+
+    // Método para eliminar usuario
+  async deleteById(id) {
+    try {
+      return await this.findByIdAndDelete(id);
+    } catch (error) {
+      console.error("Error al eliminar usuario por id:", error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new UserDAO();
