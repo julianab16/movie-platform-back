@@ -158,47 +158,103 @@ console.log('DEBUG búsqueda previa del usuario:', userCheck);
 
 
 // Eliminar cuenta (con contraseña y confirmación)
+// DELETE /users/me - Eliminar cuenta del usuario autenticado
 async deleteAccount(req, res) {
   try {
-    const userId = req.user?.id || req.user?.userId || req.user?._id;
-    const { password, confirmText } = req.body;
+    console.log("=== DEBUG DELETE ACCOUNT ===");
 
+    // 1️⃣ Obtener el token del encabezado Authorization
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({
+        success: false,
+        message: "Token no proporcionado",
+      });
+    }
+
+    const token = authHeader.split(" ")[1];
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: "Formato de token inválido",
+      });
+    }
+
+    // 2️⃣ Verificar token con Supabase
+    const { data: userData, error: tokenError } = await supabase.auth.getUser(token);
+    if (tokenError || !userData?.user) {
+      console.error("Error verificando token:", tokenError);
+      return res.status(401).json({
+        success: false,
+        message: "Token inválido o expirado",
+      });
+    }
+
+    const userId = userData.user.id;
+    console.log("✅ Usuario autenticado:", userId);
+
+    // 3️⃣ Extraer datos del cuerpo
+    const { password, confirmText } = req.body;
     if (!password || !confirmText) {
-      return res.status(400).json({ success: false, message: "Contraseña y confirmación son requeridas" });
+      return res.status(400).json({
+        success: false,
+        message: "Contraseña y confirmación son requeridas",
+      });
     }
 
     if (confirmText !== "ELIMINAR") {
-      return res.status(400).json({ success: false, message: "Debe escribir 'ELIMINAR' para confirmar" });
+      return res.status(400).json({
+        success: false,
+        message: "Debe escribir 'ELIMINAR' para confirmar",
+      });
     }
 
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', userId)
-      .single();
-
-    if (userError) {
-      return res.status(404).json({ success: false, message: "Usuario no encontrado" });
+    // 4️⃣ Obtener usuario desde el DAO
+    const user = await this.dao.getById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Usuario no encontrado",
+      });
     }
 
-    const isValidPassword = await bcrypt.compare(password, user.password_hash);
+    // 5️⃣ Verificar contraseña
+    const isValidPassword = await this.dao.comparePassword(password, user.contrasena);
     if (!isValidPassword) {
-      return res.status(401).json({ success: false, message: "Contraseña incorrecta" });
+      return res.status(401).json({
+        success: false,
+        message: "Contraseña incorrecta",
+      });
     }
 
-    const { error: deleteError } = await supabase
-      .from('users')
-      .delete()
-      .eq('id', userId);
+    // 6️⃣ Eliminar usuario en la tabla `users`
+    const deletedUser = await this.dao.delete(userId);
+    if (!deletedUser) {
+      return res.status(404).json({
+        success: false,
+        message: "Usuario no encontrado o ya eliminado",
+      });
+    }
 
-    if (deleteError) throw deleteError;
+    console.log("✅ Usuario eliminado en la base de datos:", userId);
 
-    res.status(204).send();
+    // 7️⃣ Eliminar usuario también de Supabase Auth
+    const { error: deleteAuthError } = await supabase.auth.admin.deleteUser(userId);
+    if (deleteAuthError) {
+      console.error("Error eliminando en Supabase Auth:", deleteAuthError);
+    }
+
+    res.status(204).send(); // No Content → éxito sin cuerpo
+
   } catch (error) {
     console.error("Error al eliminar cuenta:", error);
-    res.status(500).json({ success: false, message: "Error interno del servidor" });
+    res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+    });
   }
 }
+
 
  // POST /users/register - Registrar nuevo usuario
   async registerUser(req, res) {
