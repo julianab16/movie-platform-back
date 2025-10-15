@@ -6,7 +6,6 @@ const router = express.Router();
 
 // Public routes
 router.get("/", UserController.getAll);
-router.get("/:id", UserController.read);
 router.post("/", UserController.create);
 
 // Authentication routes (public)
@@ -18,6 +17,9 @@ router.post("/logout", authenticateToken, UserController.logoutUser);
 router.get("/me", authenticateToken, UserController.getProfile);
 router.put("/me", authenticateToken, UserController.updateProfile);
 router.delete("/me", authenticateToken, UserController.deleteAccount);
+
+// Public route to get user by id (should be before :id with auth)
+router.get("/:id", UserController.read);
 
 // Protected CRUD operations
 router.put("/:id", authenticateToken, UserController.update);

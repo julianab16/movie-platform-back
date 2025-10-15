@@ -13,28 +13,42 @@ class UserController extends GlobalController {
   // GET /users/me - Get authenticated user profile
   async getProfile(req, res) {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader) {
-        return res.status(401).json({ 
-          success: false, 
-          message: "Token no proporcionado" 
-        });
+      // Prefer the decoded user from the authentication middleware
+      let userId = req.user?.id || req.user?.userId || req.user?._id;
+
+      // Fallback: try Supabase auth if middleware wasn't used
+      if (!userId) {
+        const authHeader = req.headers.authorization;
+        if (!authHeader) {
+          return res.status(401).json({ success: false, message: "Token no proporcionado" });
+        }
+        const token = authHeader.split(" ")[1];
+        try {
+          const { data, error } = await supabase.auth.getUser(token);
+          if (error || !data?.user) {
+            return res.status(401).json({ success: false, message: "ID de usuario no encontrado en el token" });
+          }
+          userId = data.user.id;
+        } catch (err) {
+          return res.status(401).json({ success: false, message: "Token inválido" });
+        }
       }
 
-      const token = authHeader.split(" ")[1];
-      const { data, error } = await supabase.auth.getUser(token);
+      // Retrieve user from database
+      const { data: userRecord, error: userError } = await supabase
+        .from('users')
+        .select('id, nombres, apellidos, edad, correo, created_at')
+        .eq('id', userId)
+        .single();
 
-      if (error || !data.user) {
-        return res.status(401).json({ 
-          success: false, 
-          message: "ID de usuario no encontrado en el token" 
-        });
+      if (userError || !userRecord) {
+        return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
       }
 
       return res.status(200).json({
         success: true,
         message: "Usuario autenticado correctamente",
-        user: data.user
+        data: userRecord
       });
 
     } catch (error) {
@@ -170,42 +184,40 @@ class UserController extends GlobalController {
   // DELETE /users/me - Delete account
   async deleteAccount(req, res) {
     try {
-      const userId = req.user?.id || req.user?.userId || req.user?._id;
-      const { password, confirmText } = req.body;
+      let userId = req.user?.id || req.user?.userId || req.user?._id;
+      const { password, confirmText } = req.body || {};
 
-      if (!password || !confirmText) {
-        return res.status(400).json({ 
-          success: false, 
-          message: "Contraseña y confirmación son requeridas" 
-        });
+      // If the user is authenticated (token/middleware), allow deletion without password
+      if (!userId) {
+        // No middleware; require password + confirmation
+        if (!password || !confirmText) {
+          return res.status(400).json({ success: false, message: "Contraseña y confirmación son requeridas" });
+        }
+
+        if (confirmText !== "ELIMINAR") {
+          return res.status(400).json({ success: false, message: "Debe escribir 'ELIMINAR' para confirmar" });
+        }
+
+        // Find user by some field? In this branch we can't identify the user, so reject
+        return res.status(400).json({ success: false, message: 'Usuario no autenticado' });
       }
 
-      if (confirmText !== "ELIMINAR") {
-        return res.status(400).json({ 
-          success: false, 
-          message: "Debe escribir 'ELIMINAR' para confirmar" 
-        });
-      }
+      // If password provided, verify it. Otherwise assume authenticated user intent.
+      if (password) {
+        const { data: user, error: userError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', userId)
+          .single();
 
-      const { data: user, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .single();
+        if (userError || !user) {
+          return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+        }
 
-      if (userError) {
-        return res.status(404).json({ 
-          success: false, 
-          message: "Usuario no encontrado" 
-        });
-      }
-
-      const isValidPassword = await bcrypt.compare(password, user.contrasena);
-      if (!isValidPassword) {
-        return res.status(401).json({ 
-          success: false, 
-          message: "Contraseña incorrecta" 
-        });
+        const isValidPassword = await bcrypt.compare(password, user.contrasena);
+        if (!isValidPassword) {
+          return res.status(401).json({ success: false, message: 'Contraseña incorrecta' });
+        }
       }
 
       const { error: deleteError } = await supabase
@@ -215,7 +227,7 @@ class UserController extends GlobalController {
 
       if (deleteError) throw deleteError;
 
-      res.status(204).send();
+      res.status(200).json({ success: true, message: 'Cuenta eliminada exitosamente' });
     } catch (error) {
       console.error("Error al eliminar cuenta:", error);
       res.status(500).json({ 

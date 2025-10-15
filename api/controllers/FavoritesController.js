@@ -8,6 +8,7 @@
 
 import FavoritesDAO from '../dao/FavoritesDAO.js';
 import logger from '../utils/logger.js';
+import { supabase } from '../config/supabase.js';
 
 class FavoritesController {
   
@@ -19,7 +20,6 @@ class FavoritesController {
   async getUserFavorites(req, res) {
     try {
       const userId = req.user?.id || req.user?.userId;
-      
       if (!userId) {
         return res.status(401).json({
           success: false,
@@ -33,9 +33,9 @@ class FavoritesController {
       // Get favorites using the DAO
       const favorites = await FavoritesDAO.getFavoritesByUserId(userId);
 
-      logger.success('FAVORITES_CONTROLLER', 'Favoritos obtenidos exitosamente', { 
-        userId, 
-        count: favorites?.length || 0 
+      logger.success('FAVORITES_CONTROLLER', 'Favoritos obtenidos exitosamente', {
+        userId,
+        count: favorites?.length || 0
       });
 
       res.status(200).json({
@@ -45,13 +45,13 @@ class FavoritesController {
         message: "Favorites retrieved successfully",
         message_es: "Favoritos obtenidos exitosamente"
       });
-
     } catch (error) {
       logger.error('FAVORITES_CONTROLLER', 'Error inesperado al obtener favoritos', error);
       res.status(500).json({
         success: false,
         message: "Internal server error",
-        message_es: "Error interno del servidor"
+        message_es: "Error interno del servidor",
+        error: error.message || String(error)
       });
     }
   }
@@ -289,7 +289,7 @@ class FavoritesController {
       // Check if movie is in favorites
       const { data: favorite, error } = await supabase
         .from('favorites')
-        .select('id, added_at')
+        .select('id, created_at')
         .eq('user_id', userId)
         .eq('movie_id', movieId)
         .single();
@@ -298,8 +298,9 @@ class FavoritesController {
         logger.error('FAVORITES_CONTROLLER', 'Error verificando favorito', error);
         return res.status(500).json({
           success: false,
-          message: "Error checking favorite status",
-          message_es: "Error verificando estado de favorito"
+            message: "Error checking favorite status",
+            message_es: "Error verificando estado de favorito",
+            error: error.message || error
         });
       }
 
@@ -315,7 +316,7 @@ class FavoritesController {
         success: true,
         data: {
           isFavorite,
-          addedAt: favorite?.added_at || null
+    addedAt: favorite?.created_at || null
         },
         message: "Favorite status retrieved successfully",
         message_es: "Estado de favorito obtenido exitosamente"
@@ -351,7 +352,7 @@ class FavoritesController {
       logger.info('FAVORITES_CONTROLLER', 'Obteniendo estadísticas de favoritos', { userId });
 
       // Get total count
-      const { count: totalFavorites, error: countError } = await supabase
+      const { data: countData, error: countError, count: totalFavorites } = await supabase
         .from('favorites')
         .select('id', { count: 'exact' })
         .eq('user_id', userId);
@@ -362,49 +363,57 @@ class FavoritesController {
           success: false,
           message: "Error retrieving favorites stats",
           message_es: "Error obteniendo estadísticas de favoritos"
+          , error: countError.message || countError
         });
       }
 
       // Get genres distribution
-      const { data: genresData, error: genresError } = await supabase
-        .from('favorites')
-        .select('movie_genre')
-        .eq('user_id', userId);
+        // Build genres distribution and recent favorites by joining movie info
+        const { data: favRows, error: favError } = await supabase
+          .from('favorites')
+          .select('movie_id, created_at')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false });
 
-      if (genresError) {
-        logger.error('FAVORITES_CONTROLLER', 'Error obteniendo géneros', genresError);
-        return res.status(500).json({
-          success: false,
-          message: "Error retrieving genres stats",
-          message_es: "Error obteniendo estadísticas de géneros"
-        });
-      }
-
-      // Process genres
-      const genreCounts = {};
-      genresData?.forEach(item => {
-        if (item.movie_genre) {
-          const genres = Array.isArray(item.movie_genre) 
-            ? item.movie_genre 
-            : item.movie_genre.split(',').map(g => g.trim());
-          
-          genres.forEach(genre => {
-            genreCounts[genre] = (genreCounts[genre] || 0) + 1;
+        if (favError) {
+          logger.error('FAVORITES_CONTROLLER', 'Error obteniendo favoritos para stats', favError);
+          return res.status(500).json({
+            success: false,
+            message: 'Error retrieving favorites for stats',
+            message_es: 'Error obteniendo favoritos para estadísticas',
+            error: favError.message || String(favError)
           });
         }
-      });
 
-      // Get recent favorites
-      const { data: recentFavorites, error: recentError } = await supabase
-        .from('favorites')
-        .select('movie_title, added_at')
-        .eq('user_id', userId)
-        .order('added_at', { ascending: false })
-        .limit(5);
+        const movieIds = Array.from(new Set((favRows || []).map(r => r.movie_id))).filter(Boolean);
 
-      if (recentError) {
-        logger.warn('FAVORITES_CONTROLLER', 'Error obteniendo favoritos recientes', recentError);
-      }
+        let moviesData = [];
+        if (movieIds.length > 0) {
+          const { data: mdata, error: mError } = await supabase
+            .from('movies')
+            .select('id, nombre, genero')
+            .in('id', movieIds);
+
+          if (mError) {
+            logger.error('FAVORITES_CONTROLLER', 'Error obteniendo datos de películas', mError);
+          } else {
+            moviesData = mdata || [];
+          }
+        }
+
+        const genreCounts = {};
+        const recentFavorites = (favRows || []).slice(0, 5).map(f => {
+          const m = (moviesData || []).find(x => x.id === f.movie_id) || {};
+          if (m.genero) {
+            const genres = Array.isArray(m.genero) ? m.genero : String(m.genero).split(',').map(g => g.trim());
+            genres.forEach(g => { genreCounts[g] = (genreCounts[g] || 0) + 1; });
+          }
+          return {
+            movie_id: f.movie_id,
+            movie_title: m.nombre || null,
+            created_at: f.created_at
+          };
+        });
 
       const stats = {
         totalFavorites: totalFavorites || 0,
@@ -455,7 +464,7 @@ class FavoritesController {
       logger.warn('FAVORITES_CONTROLLER', 'Limpiando todos los favoritos', { userId });
 
       // Get count before deletion for confirmation
-      const { count: totalBefore, error: countError } = await supabase
+      const { data: countData, error: countError, count: totalBefore } = await supabase
         .from('favorites')
         .select('id', { count: 'exact' })
         .eq('user_id', userId);
