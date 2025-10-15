@@ -13,6 +13,10 @@ router.post("/register", UserController.registerUser);
 router.post("/login", UserController.loginUser);
 router.post("/logout", authenticateToken, UserController.logoutUser);
 
+// Password recovery routes (public)
+router.post("/forgot-password", UserController.forgotPassword);
+router.post("/reset-password", UserController.resetPassword);
+
 // Protected routes (require authentication)
 router.get("/me", authenticateToken, UserController.getProfile);
 router.put("/me", authenticateToken, UserController.updateProfile);

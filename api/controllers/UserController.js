@@ -4,6 +4,9 @@ import UserDAO from '../dao/UserDAO.js';
 import jwt from '../utils/jwt.js';
 import bcrypt from 'bcryptjs';
 import logger from '../utils/logger.js';
+import crypto from 'crypto';
+import PasswordResetToken from '../models/PasswordResetToken.js';
+import { sendPasswordResetEmail } from '../utils/emailService.js';
 
 class UserController extends GlobalController {
   constructor() {
@@ -544,6 +547,166 @@ class UserController extends GlobalController {
 
     } catch (error) {
       logger.error('USER_CONTROLLER', 'Error en logout', error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        message_es: "Error interno del servidor"
+      });
+    }
+  }
+
+  // POST /users/forgot-password
+  async forgotPassword(req, res) {
+    try {
+      const { correo } = req.body;
+
+      if (!correo) {
+        return res.status(400).json({
+          success: false,
+          message: "Email is required",
+          message_es: "El correo es requerido"
+        });
+      }
+
+      // Buscar usuario por correo
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('id, nombres, correo')
+        .eq('correo', correo.toLowerCase())
+        .single();
+
+      // Siempre retornar éxito para evitar enumeración de usuarios
+      if (userError || !user) {
+        logger.info('USER_CONTROLLER', 'Password reset solicitado para email inexistente', { correo });
+        return res.status(200).json({
+          success: true,
+          message: "If the email exists, a password reset link has been sent",
+          message_es: "Si el correo existe, se ha enviado un enlace de recuperación"
+        });
+      }
+
+      // Generar token seguro
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+
+      // Eliminar tokens anteriores del usuario
+      await PasswordResetToken.deleteByUserId(user.id);
+
+      // Crear nuevo token
+      await PasswordResetToken.create(user.id, hashedToken, expiresAt);
+
+      // Enviar email
+      try {
+        await sendPasswordResetEmail(user.correo, resetToken, user.nombres || 'Usuario');
+        logger.info('USER_CONTROLLER', 'Email de recuperación enviado', { userId: user.id });
+      } catch (emailError) {
+        logger.error('USER_CONTROLLER', 'Error enviando email', emailError);
+        return res.status(500).json({
+          success: false,
+          message: "Error sending reset email",
+          message_es: "Error al enviar el correo de recuperación"
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Password reset email sent successfully",
+        message_es: "Correo de recuperación enviado exitosamente"
+      });
+
+    } catch (error) {
+      logger.error('USER_CONTROLLER', 'Error en forgotPassword', error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        message_es: "Error interno del servidor"
+      });
+    }
+  }
+
+  // POST /users/reset-password
+  async resetPassword(req, res) {
+    try {
+      const { token, nuevaContrasena } = req.body;
+
+      if (!token || !nuevaContrasena) {
+        return res.status(400).json({
+          success: false,
+          message: "Token and new password are required",
+          message_es: "El token y la nueva contraseña son requeridos"
+        });
+      }
+
+      if (nuevaContrasena.length < 8) {
+        return res.status(400).json({
+          success: false,
+          message: "Password must be at least 8 characters",
+          message_es: "La contraseña debe tener al menos 8 caracteres"
+        });
+      }
+
+      // Hashear el token para comparar
+      const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+      // Buscar token válido
+      const tokenRecord = await PasswordResetToken.findValid(hashedToken);
+
+      if (!tokenRecord) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid or expired token",
+          message_es: "Token inválido o expirado"
+        });
+      }
+
+      // Obtener usuario
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('id, correo')
+        .eq('id', tokenRecord.user_id)
+        .single();
+
+      if (userError || !user) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+          message_es: "Usuario no encontrado"
+        });
+      }
+
+      // Hashear nueva contraseña
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(nuevaContrasena, salt);
+
+      // Actualizar contraseña
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ contrasena: hashedPassword })
+        .eq('id', user.id);
+
+      if (updateError) {
+        logger.error('USER_CONTROLLER', 'Error actualizando contraseña', updateError);
+        return res.status(500).json({
+          success: false,
+          message: "Error updating password",
+          message_es: "Error al actualizar la contraseña"
+        });
+      }
+
+      // Marcar token como usado
+      await PasswordResetToken.markAsUsed(hashedToken);
+
+      logger.info('USER_CONTROLLER', 'Contraseña restablecida exitosamente', { userId: user.id });
+
+      res.status(200).json({
+        success: true,
+        message: "Password reset successfully",
+        message_es: "Contraseña restablecida exitosamente"
+      });
+
+    } catch (error) {
+      logger.error('USER_CONTROLLER', 'Error en resetPassword', error);
       res.status(500).json({
         success: false,
         message: "Internal server error",
