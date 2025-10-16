@@ -11,10 +11,25 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 //configuración de cors
+const allowedOrigins = [
+  'http://localhost:5173',
+  process.env.FRONTEND_URL || 'https://samfilms-client-liard.vercel.app'
+];
+
 app.use(cors({
-  origin: ['http://localhost:5173', 'https://samfilms-client-liard.vercel.app'], // tu frontend
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.some(allowed => 
+      origin === allowed || origin.endsWith('.vercel.app')
+    )) {
+      callback(null, true);
+    } else {
+      callback(new Error('No permitido por CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
 
 // Middlewares
