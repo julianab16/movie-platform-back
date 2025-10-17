@@ -12,8 +12,7 @@ const PORT = process.env.PORT || 3000;
 
 //configuración de cors
 const allowedOrigins = [
-  'http://localhost:5173',
-  process.env.FRONTEND_URL || 'https://samfilms-client-liard.vercel.app'
+  process.env.FRONTEND_URL
 ];
 
 app.use(cors({
