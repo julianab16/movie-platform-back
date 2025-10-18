@@ -16,6 +16,7 @@ const PORT = process.env.PORT || 3000;
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
+  'https://samfilms-client.vercel.app',
   process.env.FRONTEND_URL,
 ].filter(Boolean);
 
@@ -40,7 +41,7 @@ app.use(cors({
       
       // Verificar si está en la lista de permitidos
       if (allowedOrigins.includes(origin)) {
-        console.log('✅ Origin permitido:', origin);
+        //console.log('✅ Origin permitido:', origin);
         return callback(null, true);
       }
       

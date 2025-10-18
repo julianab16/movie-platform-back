@@ -327,8 +327,27 @@ class UserController extends GlobalController {
       });
 
       if (authError) {
+        // Log full error for debugging
         logger.error('USER_CONTROLLER', 'Error en Supabase Auth', authError);
-        throw authError;
+
+        // authError from @supabase/auth-js is often an AuthApiError with a message
+        const authErrorMessage = (authError && (authError.message || JSON.stringify(authError))) || '';
+
+        // Common case: user already exists in auth but not in custom users table
+        if (authErrorMessage.toLowerCase().includes('user already registered') || authErrorMessage.toLowerCase().includes('user already exists')) {
+          return res.status(409).json({
+            success: false,
+            message: "User already registered",
+            message_es: "Usuario ya registrado"
+          });
+        }
+
+        // For other auth provider errors return a 502 Bad Gateway (upstream auth error)
+        return res.status(502).json({
+          success: false,
+          message: "Authentication provider error",
+          message_es: "Error del proveedor de autenticación"
+        });
       }
 
       if (!authData?.user) {
