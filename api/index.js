@@ -5,94 +5,88 @@ import { testConnection } from './config/supabase.js';
 import routes from './routes/routes.js';
 import cors from 'cors';
 
+// Load .env into process.env early
 dotenv.config();
+
+// In Node we should use process.env (import.meta.env is a Vite/browser feature)
+const API_BASE_URL = process.env.VITE_API_URL || process.env.API_BASE_URL || 'http://localhost:3000/api/v1';
+
+console.log('🔧 API URL configurada:', API_BASE_URL);
+console.log('🔧 Environment:', process.env.NODE_ENV || process.env.MODE || 'development');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-//configuración de cors
+// Configuración de CORS mejorada para producción
 const allowedOrigins = [
   'http://localhost:5173',
-  process.env.FRONTEND_URL
+  'http://localhost:3000',
+  process.env.FRONTEND_URL, // Tu URL de Vercel
+  'https://samfilms-client.vercel.app', // Reemplaza con tu dominio real
 ].filter(Boolean);
 
 app.use(cors({
   origin: function (origin, callback) {
+    // Permitir requests sin origin (mobile apps, Postman, etc)
     if (!origin) return callback(null, true);
+    
     try {
-      const hostname = new URL(origin).hostname; // 'mi-app.vercel.app'
-      if (allowedOrigins.includes(origin) || hostname.endsWith('vercel.app')) {
+      const hostname = new URL(origin).hostname;
+      
+      // Permitir orígenes específicos
+      if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
+      
+      // Permitir todos los subdominios de vercel.app
+      if (hostname.endsWith('vercel.app')) {
+        return callback(null, true);
+      }
+      
+      // Bloquear otros orígenes
+      console.warn('⚠️ CORS blocked origin:', origin);
+      callback(new Error('No permitido por CORS'));
     } catch (e) {
-      // origin no es una URL válida
+      console.warn('⚠️ Invalid origin:', origin);
+      callback(new Error('Origen inválido'));
     }
-    console.warn('CORS blocked origin:', origin);
-    callback(new Error('No permitido por CORS'));
   },
-  credentials: true,
-  methods: ['GET','POST','PUT','DELETE','OPTIONS']
+  credentials: true, // Permitir envío de cookies
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Content-Length', 'X-Request-Id'],
+  maxAge: 86400 // 24 horas de cache para preflight
 }));
+
 // Middlewares
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Verify connection with Supabase on startup
+// Verificar conexión con Supabase
 testConnection();
 
 // API Routes
 app.use('/api/v1', routes);
 
-// Test route
-app.get('/', (req, res) => {
+// Health check para Render
+app.get('/health', (req, res) => {
   res.json({ 
-    message: 'API funcionando correctamente',
+    status: 'ok',
+    timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV 
   });
 });
 
-// Route to check available tables
-app.get('/check-tables', async (req, res) => {
-  const { supabase } = await import('./config/supabase.js');
-  
-  const commonTables = [
-    'users', 'usuarios', 'movies', 'peliculas', 'comments', 'comentarios',
-    'favorites', 'favoritos', 'products', 'productos', 'orders', 
-    'pedidos', 'categories', 'categorias', 'clientes', 'ventas',
-    'inventory', 'inventario', 'items', 'articulos'
-  ];
-
-  const availableTables = [];
-
-  for (const tableName of commonTables) {
-    try {
-      const { data, error } = await supabase
-        .from(tableName)
-        .select('*')
-        .limit(1);
-
-      if (!error) {
-        const columns = data && data.length > 0 ? Object.keys(data[0]) : [];
-        availableTables.push({ 
-          table: tableName, 
-          columns,
-          hasData: data && data.length > 0 
-        });
-      }
-    } catch (err) {
-      // Table does not exist
-    }
-  }
-
-  res.json({
-    success: true,
-    tablesFound: availableTables.length,
-    tables: availableTables,
-    tip: 'Si no ves tus tablas, pregunta al creador los nombres exactos'
+// Test route
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'API funcionando correctamente',
+    environment: process.env.NODE_ENV,
+    frontend: process.env.FRONTEND_URL
   });
 });
 
-// Middleware for 404 - Not Found (must be after all routes)
+// 404 Handler
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -101,7 +95,7 @@ app.use((req, res) => {
   });
 });
 
-// Global error handler (must be last middleware)
+// Error Handler
 app.use((err, req, res, next) => {
   console.error('Error:', err.stack);
   res.status(err.status || 500).json({
@@ -112,11 +106,11 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log('═══════════════════════════════════════');
   console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
   console.log(`📍 Modo: ${process.env.NODE_ENV}`);
-  console.log(`🌐 URL: http://localhost:${PORT}`);
+  console.log(`🌐 Frontend: ${process.env.FRONTEND_URL}`);
   console.log('═══════════════════════════════════════');
 });
 
