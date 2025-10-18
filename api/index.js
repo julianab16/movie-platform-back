@@ -12,25 +12,27 @@ const PORT = process.env.PORT || 3000;
 
 //configuración de cors
 const allowedOrigins = [
+  'http://localhost:5173',
   process.env.FRONTEND_URL
-];
+].filter(Boolean);
 
 app.use(cors({
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.some(allowed => 
-      origin === allowed || origin.endsWith('.vercel.app')
-    )) {
-      callback(null, true);
-    } else {
-      callback(new Error('No permitido por CORS'));
+    try {
+      const hostname = new URL(origin).hostname; // 'mi-app.vercel.app'
+      if (allowedOrigins.includes(origin) || hostname.endsWith('vercel.app')) {
+        return callback(null, true);
+      }
+    } catch (e) {
+      // origin no es una URL válida
     }
+    console.warn('CORS blocked origin:', origin);
+    callback(new Error('No permitido por CORS'));
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+  methods: ['GET','POST','PUT','DELETE','OPTIONS']
 }));
-
 // Middlewares
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
