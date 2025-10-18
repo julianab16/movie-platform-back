@@ -4,27 +4,35 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Validate that environment variables exist
+// ===========================================
+// 🔧 Validación de variables de entorno
+// ===========================================
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Las credenciales de Supabase no están configuradas correctamente');
+if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceKey) {
+  throw new Error('❌ Faltan variables de entorno de Supabase (URL, ANON_KEY o SERVICE_ROLE_KEY)');
 }
 
-// Public client (for client-side operations)
+// ===========================================
+// 🚀 Cliente público (para uso general / front)
+// ===========================================
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Client with administrative privileges (for server-side operations)  
+// ===========================================
+// 🛠️ Cliente administrativo (para servidor)
+// ===========================================
 export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   auth: {
     autoRefreshToken: false,
-    persistSession: false
-  }
+    persistSession: false,
+  },
 });
 
-// Function to verify the connection
+// ===========================================
+// 🧪 Función de prueba de conexión
+// ===========================================
 export const testConnection = async () => {
   try {
     const { data, error } = await supabase.from('users').select('*').limit(1);
@@ -39,5 +47,3 @@ export const testConnection = async () => {
     return false;
   }
 };
-
-export default supabase;

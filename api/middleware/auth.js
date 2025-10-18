@@ -68,18 +68,18 @@ const authenticateToken = async (req, res, next) => {
 
 // MIDDLEWARE PRE-SAVE: Password hash with bcrypt (min 10 salt rounds)
 const preSave = (schema) => {
-  schema.pre('save', async function(next) {
-    // Only hash if the password is new or was modified
+  schema.pre('save', async function (next) {
     if (!this.isModified('contrasena')) return next();
-    
+
     try {
-      // Hash with 12 salt rounds (more than the minimum of 10)
-      this.contrasena = bcrypt.hash(this.contrasena, 12);
+      const rounds = Number(process.env.BCRYPT_SALT_ROUNDS) || 12;
+      this.contrasena = await bcrypt.hash(this.contrasena, rounds);
       next();
     } catch (error) {
       next(error);
     }
   });
 };
+
 
 export { authenticateToken, preSave };
