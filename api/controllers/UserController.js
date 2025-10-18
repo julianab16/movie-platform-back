@@ -1,4 +1,4 @@
-import { supabase } from '../config/supabase.js';
+import { supabaseAdmin as supabase } from '../config/supabase.js';
 import GlobalController from './GlobalController.js';
 import UserDAO from '../dao/UserDAO.js';
 import jwt from '../utils/jwt.js';
