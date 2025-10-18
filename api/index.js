@@ -1,117 +1,196 @@
-// index.js
+// api/index.js
 import express from 'express';
 import dotenv from 'dotenv';
 import { testConnection } from './config/supabase.js';
 import routes from './routes/routes.js';
 import cors from 'cors';
 
-// Load .env into process.env early
 dotenv.config();
-
-// In Node we should use process.env (import.meta.env is a Vite/browser feature)
-const API_BASE_URL = process.env.VITE_API_URL || process.env.API_BASE_URL || 'http://localhost:3000/api/v1';
-
-console.log('🔧 API URL configurada:', API_BASE_URL);
-console.log('🔧 Environment:', process.env.NODE_ENV || process.env.MODE || 'development');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Configuración de CORS mejorada para producción
+// ============================================
+// CONFIGURACIÓN CORS MEJORADA
+// ============================================
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
-  process.env.FRONTEND_URL, // Tu URL de Vercel
-  'https://samfilms-client.vercel.app', // Reemplaza con tu dominio real
+  process.env.FRONTEND_URL,
 ].filter(Boolean);
+
+console.log('🌐 Origenes permitidos:', allowedOrigins);
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Permitir requests sin origin (mobile apps, Postman, etc)
-    if (!origin) return callback(null, true);
+    // Permitir requests sin origin (Postman, mobile apps, etc)
+    if (!origin) {
+      console.log('✅ Request sin origin permitido');
+      return callback(null, true);
+    }
     
     try {
-      const hostname = new URL(origin).hostname;
+      const url = new URL(origin);
+      const hostname = url.hostname;
       
-      // Permitir orígenes específicos
+      // Verificar si está en la lista de permitidos
       if (allowedOrigins.includes(origin)) {
+        console.log('✅ Origin permitido:', origin);
         return callback(null, true);
       }
       
       // Permitir todos los subdominios de vercel.app
-      if (hostname.endsWith('vercel.app')) {
+      if (hostname.endsWith('.vercel.app')) {
+        console.log('✅ Vercel origin permitido:', origin);
         return callback(null, true);
       }
       
-      // Bloquear otros orígenes
-      console.warn('⚠️ CORS blocked origin:', origin);
+      // Permitir vercel.app directo
+      if (hostname === 'vercel.app') {
+        console.log('✅ Vercel origin permitido:', origin);
+        return callback(null, true);
+      }
+      
+      console.warn('⚠️ Origin bloqueado:', origin);
       callback(new Error('No permitido por CORS'));
     } catch (e) {
-      console.warn('⚠️ Invalid origin:', origin);
-      callback(new Error('Origen inválido'));
+      console.error('❌ Error parseando origin:', origin, e.message);
+      callback(new Error('Origin inválido'));
     }
   },
-  credentials: true, // Permitir envío de cookies
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With',
+    'Accept',
+    'Origin'
+  ],
   exposedHeaders: ['Content-Length', 'X-Request-Id'],
-  maxAge: 86400 // 24 horas de cache para preflight
+  maxAge: 86400, // 24 horas
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 }));
 
-// Middlewares
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// ============================================
+// MIDDLEWARES
+// ============================================
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Verificar conexión con Supabase
-testConnection();
+// Log de requests (útil para debugging)
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.path}`, {
+    origin: req.headers.origin,
+    userAgent: req.headers['user-agent']?.substring(0, 50)
+  });
+  next();
+});
 
-// API Routes
-app.use('/api/v1', routes);
-
-// Health check para Render
+// ============================================
+// HEALTH CHECK
+// ============================================
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV 
+    environment: process.env.NODE_ENV,
+    uptime: process.uptime()
   });
 });
 
-// Test route
+// Ping endpoint para keep-alive
+app.get('/ping', (req, res) => {
+  res.json({ pong: true, time: Date.now() });
+});
+
+// ============================================
+// ROOT ENDPOINT
+// ============================================
 app.get('/', (req, res) => {
   res.json({ 
-    message: 'API funcionando correctamente',
+    message: 'SamFilms API v1.0',
+    status: 'running',
     environment: process.env.NODE_ENV,
-    frontend: process.env.FRONTEND_URL
+    endpoints: {
+      health: '/health',
+      api: '/api/v1',
+      docs: 'https://github.com/tu-repo'
+    }
   });
 });
+
+// ============================================
+// API ROUTES
+// ============================================
+app.use('/api/v1', routes);
+
+// ============================================
+// ERROR HANDLERS
+// ============================================
 
 // 404 Handler
 app.use((req, res) => {
   res.status(404).json({
     success: false,
     message: 'Ruta no encontrada',
-    path: req.originalUrl
+    path: req.originalUrl,
+    method: req.method
   });
 });
 
-// Error Handler
+// Global Error Handler
 app.use((err, req, res, next) => {
-  console.error('Error:', err.stack);
+  console.error('❌ Error:', err);
+  
+  // Error de CORS
+  if (err.message.includes('CORS')) {
+    return res.status(403).json({
+      success: false,
+      message: 'Acceso denegado por CORS',
+      origin: req.headers.origin
+    });
+  }
+  
+  // Otros errores
   res.status(err.status || 500).json({
     success: false,
     message: err.message || 'Error interno del servidor',
-    error: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
 });
 
-// Start server
-app.listen(PORT, '0.0.0.0', () => {
-  console.log('═══════════════════════════════════════');
+// ============================================
+// START SERVER
+// ============================================
+const server = app.listen(PORT, '0.0.0.0', async () => {
+  console.log('═════════════════════════════════════════');
   console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
-  console.log(`📍 Modo: ${process.env.NODE_ENV}`);
-  console.log(`🌐 Frontend: ${process.env.FRONTEND_URL}`);
-  console.log('═══════════════════════════════════════');
+  console.log(`📍 Modo: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🌐 Frontend: ${process.env.FRONTEND_URL || 'No configurado'}`);
+  console.log(`⏰ Timestamp: ${new Date().toISOString()}`);
+  console.log('═════════════════════════════════════════');
+  
+  // Test conexión a Supabase
+  await testConnection();
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('👋 SIGTERM recibido. Cerrando servidor...');
+  server.close(() => {
+    console.log('✅ Servidor cerrado correctamente');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('👋 SIGINT recibido. Cerrando servidor...');
+  server.close(() => {
+    console.log('✅ Servidor cerrado correctamente');
+    process.exit(0);
+  });
 });
 
 export default app;
