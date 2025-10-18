@@ -21,6 +21,11 @@ const allowedOrigins = [
 
 console.log('🌐 Origenes permitidos:', allowedOrigins);
 
+app.listen(PORT, () => {
+  console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
+});
+
+
 app.use(cors({
   origin: function (origin, callback) {
     // Permitir requests sin origin (Postman, mobile apps, etc)
