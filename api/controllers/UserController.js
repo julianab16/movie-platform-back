@@ -667,13 +667,12 @@ class UserController extends GlobalController {
         });
       }
 
-      // Hashear el token para comparar
+      // Hashear el token para comparar con el almacenado
       const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
-      // Buscar token válido
-      const tokenRecord = await PasswordResetToken.findValid(hashedToken);
-
-      if (!tokenRecord) {
+      // Consumir token de forma atómica: marcar como usado solo si no está usado y no expiró
+      const consumed = await PasswordResetToken.consume(hashedToken);
+      if (!consumed || !consumed.user_id) {
         return res.status(400).json({
           success: false,
           message: "Invalid or expired token",
@@ -681,11 +680,13 @@ class UserController extends GlobalController {
         });
       }
 
+      const userId = consumed.user_id;
+
       // Obtener usuario
       const { data: user, error: userError } = await supabase
         .from('users')
         .select('id, correo')
-        .eq('id', tokenRecord.user_id)
+        .eq('id', userId)
         .single();
 
       if (userError || !user) {
@@ -700,7 +701,7 @@ class UserController extends GlobalController {
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(nuevaContrasena, salt);
 
-      // Actualizar contraseña
+      // Actualizar contraseña en la tabla users
       const { error: updateError } = await supabase
         .from('users')
         .update({ contrasena: hashedPassword })
@@ -708,6 +709,8 @@ class UserController extends GlobalController {
 
       if (updateError) {
         logger.error('USER_CONTROLLER', 'Error actualizando contraseña', updateError);
+        // Nota: el token ya fue consumido; si falla el update quedamos en un estado en el que
+        // el token no podrá reutilizarse. Esto es preferible a dejar el token usable.
         return res.status(500).json({
           success: false,
           message: "Error updating password",
@@ -715,8 +718,27 @@ class UserController extends GlobalController {
         });
       }
 
-      // Marcar token como usado
-      await PasswordResetToken.markAsUsed(hashedToken);
+      // Intentar sincronizar contraseña con Supabase Auth (best-effort)
+      try {
+        if (supabase.auth && supabase.auth.admin && typeof supabase.auth.admin.updateUserById === 'function') {
+          // Algunas versiones del SDK exponen updateUserById
+          await supabase.auth.admin.updateUserById(user.id, { password: nuevaContrasena });
+        } else if (supabase.auth && supabase.auth.admin && typeof supabase.auth.admin.updateUser === 'function') {
+          // Alternativa genérica (no siempre disponible)
+          await supabase.auth.admin.updateUser(user.id, { password: nuevaContrasena });
+        }
+      } catch (syncErr) {
+        logger.warn('USER_CONTROLLER', 'No se pudo sincronizar contraseña con Supabase Auth (no crítico)', syncErr?.message || syncErr);
+      }
+
+      // Invalidate JWT sessions if jwt util provides it (best-effort)
+      try {
+        if (jwt && typeof jwt.invalidateTokensForUser === 'function') {
+          await jwt.invalidateTokensForUser(user.id, 'password_reset');
+        }
+      } catch (jwtErr) {
+        logger.warn('USER_CONTROLLER', 'No se pudieron invalidar sesiones JWT (no crítico)', jwtErr?.message || jwtErr);
+      }
 
       logger.info('USER_CONTROLLER', 'Contraseña restablecida exitosamente', { userId: user.id });
 
