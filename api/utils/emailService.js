@@ -1,13 +1,21 @@
 import nodemailer from 'nodemailer';
 import logger from './logger.js';
 
-const transporter = nodemailer.createTransport({
+// Build transporter options. Allow disabling TLS certificate verification in development
+// or when explicitly enabled with EMAIL_TLS_ALLOW_SELF_SIGNED=true
+const transporterOptions = {
   service: process.env.EMAIL_SERVICE || 'gmail',
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASSWORD
   }
-});
+};
+
+if (process.env.NODE_ENV !== 'production' || process.env.EMAIL_TLS_ALLOW_SELF_SIGNED === 'true') {
+  transporterOptions.tls = { rejectUnauthorized: false };
+}
+
+const transporter = nodemailer.createTransport(transporterOptions);
 
 export const sendPasswordResetEmail = async (to, resetToken, userName) => {
   // Normalize FRONTEND_URL and build a safe reset URL
