@@ -14,13 +14,13 @@ export const sendPasswordResetEmail = async (to, resetToken, userName) => {
   const frontendBase = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
   let resetUrlString;
   try {
-    const base = frontendBase || 'http://localhost:3000';
+    const base = frontendBase || 'https://samfilms-client.vercel.app';
     const url = new URL('/reset-password', base);
     url.searchParams.set('token', resetToken);
     resetUrlString = url.toString();
   } catch (err) {
     // Fallback: construct manually and encode token
-    const base = frontendBase || 'http://localhost:3000';
+    const base = frontendBase || 'https://samfilms-client.vercel.app';
     resetUrlString = `${base.replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(resetToken)}`;
   }
 
