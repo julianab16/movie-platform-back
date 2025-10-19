@@ -8,6 +8,27 @@ import crypto from 'crypto';
 import PasswordResetToken from '../models/PasswordResetToken.js';
 import { sendPasswordResetEmail } from '../utils/emailService.js';
 
+// Minimum age policy (use consistently)
+const MIN_AGE = 18;
+
+  
+function normalizeUserData(user) {
+    return {
+      id: user.id,
+      // Campos en inglés (preferidos por el frontend)
+      firstName: user.nombres,
+      lastName: user.apellidos,
+      email: user.correo,
+      age: user.edad,
+      // Campos en español (mantener compatibilidad)
+      nombres: user.nombres,
+      apellidos: user.apellidos,
+      correo: user.correo,
+      edad: user.edad,
+      createdAt: user.created_at || null,
+      updatedAt: user.updated_at || null
+    };
+}
 class UserController extends GlobalController {
   constructor() {
     super(UserDAO);
@@ -16,50 +37,48 @@ class UserController extends GlobalController {
   // GET /users/me - Get authenticated user profile
   async getProfile(req, res) {
     try {
-      // Prefer the decoded user from the authentication middleware
-      let userId = req.user?.id || req.user?.userId || req.user?._id;
+    let userId = req.user?.id || req.user?.userId || req.user?._id;
 
-      // Fallback: try Supabase auth if middleware wasn't used
-      if (!userId) {
-        const authHeader = req.headers.authorization;
-        if (!authHeader) {
-          return res.status(401).json({ success: false, message: "Token no proporcionado" });
-        }
-        const token = authHeader.split(" ")[1];
-        try {
-          const { data, error } = await supabase.auth.getUser(token);
-          if (error || !data?.user) {
-            return res.status(401).json({ success: false, message: "ID de usuario no encontrado en el token" });
-          }
-          userId = data.user.id;
-        } catch (err) {
-          return res.status(401).json({ success: false, message: "Token inválido" });
-        }
+    if (!userId) {
+      const authHeader = req.headers.authorization;
+      if (!authHeader) {
+        return res.status(401).json({ success: false, message: "Token no proporcionado" });
       }
-
-      // Retrieve user from database
-      const { data: userRecord, error: userError } = await supabase
-        .from('users')
-        .select('id, nombres, apellidos, edad, correo, created_at')
-        .eq('id', userId)
-        .single();
-
-      if (userError || !userRecord) {
-        return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+      const token = authHeader.split(" ")[1];
+      try {
+        const { data, error } = await supabase.auth.getUser(token);
+        if (error || !data?.user) {
+          return res.status(401).json({ success: false, message: "ID de usuario no encontrado en el token" });
+        }
+        userId = data.user.id;
+      } catch (err) {
+        return res.status(401).json({ success: false, message: "Token inválido" });
       }
+    }
 
-      return res.status(200).json({
-        success: true,
-        message: "Usuario autenticado correctamente",
-        data: userRecord
-      });
+    const { data: userRecord, error: userError } = await supabase
+      .from('users')
+      .select('id, nombres, apellidos, edad, correo, created_at')
+      .eq('id', userId)
+      .single();
 
-    } catch (error) {
-      console.error("Error al obtener usuario:", error);
-      res.status(500).json({ 
-        success: false, 
-        message: "Error interno del servidor" 
-      });
+    if (userError || !userRecord) {
+      return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+    }
+
+    // ✅ DEVOLVER USUARIO NORMALIZADO
+    return res.status(200).json({
+      success: true,
+      message: "Usuario autenticado correctamente",
+      data: normalizeUserData(userRecord) // ✅ Aquí está el cambio importante
+    });
+
+  } catch (error) {
+    console.error("Error al obtener usuario:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Error interno del servidor" 
+    });
     }
   }
 
@@ -114,10 +133,10 @@ class UserController extends GlobalController {
       // Validate age
       if (edad !== undefined) {
         const numEdad = parseInt(edad);
-        if (isNaN(numEdad) || numEdad < 13) {
+        if (isNaN(numEdad) || numEdad < MIN_AGE) {
           return res.status(400).json({
             success: false,
-            message: "La edad mínima permitida es 13 años"
+            message: `La edad mínima permitida es ${MIN_AGE} años`
           });
         }
         updateData.edad = numEdad;
@@ -230,6 +249,15 @@ class UserController extends GlobalController {
 
       if (deleteError) throw deleteError;
 
+      // Attempt to remove the user from Supabase Auth as well (best-effort)
+      try {
+        if (userId) {
+          await supabase.auth.admin.deleteUser(userId);
+        }
+      } catch (authDelErr) {
+        logger.warn('USER_CONTROLLER', 'No se pudo eliminar usuario de Auth (no crítico)', { userId, err: authDelErr?.message || authDelErr });
+      }
+
       res.status(200).json({ success: true, message: 'Cuenta eliminada exitosamente' });
     } catch (error) {
       console.error("Error al eliminar cuenta:", error);
@@ -240,18 +268,23 @@ class UserController extends GlobalController {
     }
   }
 
-  // POST /users/register - Register new user
+
   async registerUser(req, res) {
     try {
-      logger.info('USER_CONTROLLER', 'Iniciando registro de usuario', req.body);
+      // Avoid logging sensitive fields (passwords)
+      const safeBody = {
+        firstName: req.body.firstName || req.body.nombres,
+        lastName: req.body.lastName || req.body.apellidos,
+        email: req.body.email || req.body.correo,
+        age: req.body.age || req.body.edad
+      };
+      logger.info('USER_CONTROLLER', 'Iniciando registro de usuario', safeBody);
 
-      // Support both English and Spanish field names
       const {
         firstName, lastName, age, email, password,
         nombres, apellidos, edad, correo, contrasena
       } = req.body;
 
-      // Map to English (preferred) with Spanish fallback
       const userData = {
         firstName: firstName || nombres,
         lastName: lastName || apellidos, 
@@ -260,7 +293,6 @@ class UserController extends GlobalController {
         password: password || contrasena
       };
 
-      // Validation
       if (!userData.firstName || !userData.lastName || !userData.age || !userData.email || !userData.password) {
         return res.status(400).json({
           success: false,
@@ -269,7 +301,6 @@ class UserController extends GlobalController {
         });
       }
 
-      // Age validation
       if (userData.age < 18 || userData.age > 120) {
         return res.status(400).json({
           success: false,
@@ -278,7 +309,6 @@ class UserController extends GlobalController {
         });
       }
 
-      // Email format validation
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(userData.email)) {
         return res.status(400).json({
@@ -288,7 +318,6 @@ class UserController extends GlobalController {
         });
       }
 
-      // Password strength validation
       const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
       if (!passwordRegex.test(userData.password)) {
         return res.status(400).json({
@@ -298,7 +327,6 @@ class UserController extends GlobalController {
         });
       }
 
-      // Check if user already exists in Supabase
       const { data: existingUser, error: checkError } = await supabase
         .from('users')
         .select('id, correo')
@@ -317,37 +345,22 @@ class UserController extends GlobalController {
         });
       }
 
-      // Hash password
       const hashedPassword = await bcrypt.hash(userData.password, 10);
 
-      // Register user in Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: userData.email,
         password: userData.password,
       });
 
       if (authError) {
-        // Log full error for debugging
-        logger.error('USER_CONTROLLER', 'Error en Supabase Auth', authError);
+        logger.error('USER_CONTROLLER', 'Error en Supabase Auth', { message: authError.message || authError });
 
-        // authError from @supabase/auth-js is often an AuthApiError with a message
-        const authErrorMessage = (authError && (authError.message || JSON.stringify(authError))) || '';
-
-        // Common case: user already exists in auth but not in custom users table
-        if (authErrorMessage.toLowerCase().includes('user already registered') || authErrorMessage.toLowerCase().includes('user already exists')) {
-          return res.status(409).json({
-            success: false,
-            message: "User already registered",
-            message_es: "Usuario ya registrado"
-          });
+        const authMsg = (authError.message || '').toLowerCase();
+        if (authMsg.includes('user already registered') || authMsg.includes('user already exists')) {
+          return res.status(409).json({ success: false, message: 'User already registered', message_es: 'Usuario ya registrado' });
         }
 
-        // For other auth provider errors return a 502 Bad Gateway (upstream auth error)
-        return res.status(502).json({
-          success: false,
-          message: "Authentication provider error",
-          message_es: "Error del proveedor de autenticación"
-        });
+        return res.status(502).json({ success: false, message: 'Authentication provider error', message_es: 'Error del proveedor de autenticación' });
       }
 
       if (!authData?.user) {
@@ -358,7 +371,6 @@ class UserController extends GlobalController {
         });
       }
 
-      // Insert user data in custom users table
       const { data: newUser, error: userError } = await supabase
         .from("users")
         .insert([
@@ -377,6 +389,16 @@ class UserController extends GlobalController {
 
       if (userError) {
         logger.error('USER_CONTROLLER', 'Error insertando usuario', userError);
+        // Try to rollback the auth user to avoid orphaned auth accounts
+        try {
+          if (authData && authData.user && authData.user.id) {
+            await supabase.auth.admin.deleteUser(authData.user.id);
+            logger.info('USER_CONTROLLER', 'Auth user rollback successful', { authUserId: authData.user.id });
+          }
+        } catch (rollbackErr) {
+          logger.error('USER_CONTROLLER', 'Rollback failed deleting auth user', rollbackErr);
+        }
+
         throw userError;
       }
 
@@ -385,7 +407,6 @@ class UserController extends GlobalController {
         email: newUser.correo 
       });
 
-      // Generate JWT token
       const token = jwt.generateToken({
         id: newUser.id,
         email: newUser.correo,
@@ -393,20 +414,13 @@ class UserController extends GlobalController {
         lastName: newUser.apellidos
       });
 
-      // Return success response with token
+      // ✅ DEVOLVER USUARIO NORMALIZADO
       res.status(201).json({
         success: true,
         message: "User registered successfully",
         message_es: "Usuario registrado exitosamente",
         data: {
-          user: {
-            id: newUser.id,
-            firstName: newUser.nombres,
-            lastName: newUser.apellidos,
-            age: newUser.edad,
-            email: newUser.correo,
-            createdAt: newUser.created_at
-          },
+          user: normalizeUserData(newUser), // ✅ Aquí está el cambio importante
           token: token
         }
       });
@@ -448,93 +462,81 @@ class UserController extends GlobalController {
   // POST /users/login - User authentication
   async loginUser(req, res) {
     try {
-      logger.info('USER_CONTROLLER', 'Iniciando login', req.body);
+    logger.info('USER_CONTROLLER', 'Iniciando login', req.body);
 
-      // Support both English and Spanish field names
-      const {
-        email, password,
-        correo, contrasena
-      } = req.body;
+    const {
+      email, password,
+      correo, contrasena
+    } = req.body;
 
-      // Map to English (preferred) with Spanish fallback
-      const loginData = {
-        email: email || correo,
-        password: password || contrasena
-      };
+    const loginData = {
+      email: email || correo,
+      password: password || contrasena
+    };
 
-      // Basic validation
-      if (!loginData.email || !loginData.password) {
-        return res.status(400).json({
-          success: false,
-          message: "Email and password are required",
-          message_es: "Correo y contraseña son requeridos"
-        });
-      }
-
-      // Find user by email in Supabase
-      const { data: user, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('correo', loginData.email)
-        .single();
-
-      if (userError || !user) {
-        logger.warn('USER_CONTROLLER', 'Usuario no encontrado', { email: loginData.email });
-        return res.status(401).json({
-          success: false,
-          message: "Invalid credentials",
-          message_es: "Credenciales inválidas"
-        });
-      }
-
-      // Verify password
-      const isValidPassword = await bcrypt.compare(loginData.password, user.contrasena);
-      if (!isValidPassword) {
-        logger.warn('USER_CONTROLLER', 'Contraseña incorrecta', { email: loginData.email });
-        return res.status(401).json({
-          success: false,
-          message: "Invalid credentials",
-          message_es: "Credenciales inválidas"
-        });
-      }
-
-      // Generate JWT token
-      const token = jwt.generateToken({
-        id: user.id,
-        email: user.correo,
-        firstName: user.nombres,
-        lastName: user.apellidos
-      });
-
-      logger.success('USER_CONTROLLER', 'Login exitoso', { 
-        userId: user.id, 
-        email: user.correo 
-      });
-
-      // Return success response
-      res.status(200).json({
-        success: true,
-        message: "Login successful",
-        message_es: "Inicio de sesión exitoso",
-        data: {
-          user: {
-            id: user.id,
-            firstName: user.nombres,
-            lastName: user.apellidos,
-            age: user.edad,
-            email: user.correo
-          },
-          token: token
-        }
-      });
-
-    } catch (error) {
-      logger.error('USER_CONTROLLER', 'Error en login', error);
-      res.status(500).json({
+    if (!loginData.email || !loginData.password) {
+      return res.status(400).json({
         success: false,
-        message: "Internal server error",
-        message_es: "Error interno del servidor"
+        message: "Email and password are required",
+        message_es: "Correo y contraseña son requeridos"
       });
+    }
+
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('correo', loginData.email)
+      .single();
+
+    if (userError || !user) {
+      logger.warn('USER_CONTROLLER', 'Usuario no encontrado', { email: loginData.email });
+      return res.status(401).json({
+        success: false,
+        message: "Invalid credentials",
+        message_es: "Credenciales inválidas"
+      });
+    }
+
+    const isValidPassword = await bcrypt.compare(loginData.password, user.contrasena);
+    if (!isValidPassword) {
+      logger.warn('USER_CONTROLLER', 'Contraseña incorrecta', { email: loginData.email });
+      return res.status(401).json({
+        success: false,
+        message: "Invalid credentials",
+        message_es: "Credenciales inválidas"
+      });
+    }
+
+    const token = jwt.generateToken({
+      id: user.id,
+      email: user.correo,
+      firstName: user.nombres,
+      lastName: user.apellidos
+    });
+
+    logger.success('USER_CONTROLLER', 'Login exitoso', { 
+      userId: user.id, 
+      email: user.correo 
+    });
+
+    // ✅ DEVOLVER USUARIO NORMALIZADO
+    res.status(200).json({
+      success: true,
+      message: "Login successful",
+      message_es: "Inicio de sesión exitoso",
+      data: {
+        user: normalizeUserData(user), // ✅ Aquí está el cambio importante
+        token: token
+      }
+    });
+
+  } catch (error) {
+    logger.error('USER_CONTROLLER', 'Error en login', error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      message_es: "Error interno del servidor"
+    });
     }
   }
 
@@ -733,6 +735,7 @@ class UserController extends GlobalController {
       });
     }
   }
+  
 }
 
 export default new UserController();
