@@ -1,74 +1,215 @@
 import nodemailer from 'nodemailer';
 import logger from './logger.js';
 
-// Build transporter options. Allow disabling TLS certificate verification in development
-// or when explicitly enabled with EMAIL_TLS_ALLOW_SELF_SIGNED=true
-const transporterOptions = {
-  service: process.env.EMAIL_SERVICE || 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD
+const createTransporter = () => {
+  // Validar variables de entorno requeridas
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+    logger.error('EMAIL', 'Variables de entorno EMAIL_USER y EMAIL_PASSWORD son requeridas');
+    throw new Error('Email configuration missing');
+  }
+
+  const config = {
+    service: process.env.EMAIL_SERVICE || 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD
+    },
+    // Configuración adicional para debugging
+    debug: process.env.NODE_ENV === 'development',
+    logger: process.env.NODE_ENV === 'development'
+  };
+
+  // Solo agregar TLS en desarrollo o si está explícitamente habilitado
+  if (process.env.NODE_ENV !== 'production' || process.env.EMAIL_TLS_ALLOW_SELF_SIGNED === 'true') {
+    config.tls = { 
+      rejectUnauthorized: false,
+      minVersion: 'TLSv1.2' // Versión mínima de TLS
+    };
+  }
+
+  try {
+    const transporter = nodemailer.createTransport(config);
+    
+    // ✅ VERIFICAR CONEXIÓN AL INICIAR
+    transporter.verify((error, success) => {
+      if (error) {
+        logger.error('EMAIL', 'Error en configuración de email', error);
+      } else {
+        logger.success('EMAIL', 'Servidor de email listo para enviar mensajes');
+      }
+    });
+
+    return transporter;
+  } catch (error) {
+    logger.error('EMAIL', 'Error creando transporter', error);
+    throw error;
   }
 };
 
-if (process.env.NODE_ENV !== 'production' || process.env.EMAIL_TLS_ALLOW_SELF_SIGNED === 'true') {
-  transporterOptions.tls = { rejectUnauthorized: false };
-}
+const transporter = createTransporter();
 
-const transporter = nodemailer.createTransport(transporterOptions);
-
+/**
+ * Enviar email de recuperación de contraseña
+ */
 export const sendPasswordResetEmail = async (to, resetToken, userName) => {
-  // Normalize FRONTEND_URL and build a safe reset URL
-  const frontendBase = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
-  let resetUrlString;
   try {
-    const base = frontendBase || 'https://samfilms-client.vercel.app';
-    const url = new URL('/reset-password', base);
-    url.searchParams.set('token', resetToken);
-    resetUrlString = url.toString();
-  } catch (err) {
-    // Fallback: construct manually and encode token
-    const base = frontendBase || 'https://samfilms-client.vercel.app';
-    resetUrlString = `${base.replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(resetToken)}`;
-  }
+    // Validación de entrada
+    if (!to || !resetToken || !userName) {
+      throw new Error('Parámetros faltantes: to, resetToken, userName son requeridos');
+    }
 
-  const fromAddress = process.env.EMAIL_FROM || process.env.EMAIL_USER;
+    // Construir URL de reset
+    const frontendBase = (process.env.FRONTEND_URL || 'https://samfilms-client.vercel.app').replace(/\/$/, '');
+    let resetUrlString;
+    
+    try {
+      const url = new URL('/reset-password', frontendBase);
+      url.searchParams.set('token', resetToken);
+      resetUrlString = url.toString();
+    } catch (err) {
+      logger.warn('EMAIL', 'Error construyendo URL, usando fallback', err);
+      resetUrlString = `${frontendBase}/reset-password?token=${encodeURIComponent(resetToken)}`;
+    }
 
-  const mailOptions = {
-    from: fromAddress,
-    to,
-    subject: 'Recuperación de Contraseña - Movie Platform',
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #333;">Recuperación de Contraseña</h2>
-        <p>Hola ${userName},</p>
-        <p>Hemos recibido una solicitud para restablecer tu contraseña.</p>
-        <p>Haz clic en el siguiente botón para restablecer tu contraseña:</p>
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${resetUrlString}" 
-             style="background-color: #007bff; color: white; padding: 12px 30px; 
-                    text-decoration: none; border-radius: 5px; display: inline-block;">
-            Restablecer Contraseña
-          </a>
-        </div>
-        <p>O copia este enlace en tu navegador:</p>
-        <p style="word-break: break-all; color: #007bff;">${resetUrlString}</p>
-        <p style="color: #666; font-size: 14px;">
-          ⚠️ Este enlace expirará en 1 hora.<br>
-          Si no solicitaste este cambio, ignora este correo.
-        </p>
-      </div>
-    `,
-    text: `Hola ${userName},\n\nPara restablecer tu contraseña, visita:\n${resetUrlString}\n\nEste enlace expirará en 1 hora.`
-  };
+    // Configurar email
+    const fromAddress = process.env.EMAIL_FROM || process.env.EMAIL_USER;
+    
+    const mailOptions = {
+      from: {
+        name: 'SamFilms - Recuperación de Contraseña',
+        address: fromAddress
+      },
+      to,
+      subject: '🔐 Recuperación de Contraseña - SamFilms',
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+            .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+            .button { display: inline-block; padding: 15px 30px; background-color: #667eea; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; margin: 20px 0; }
+            .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; font-size: 14px; }
+            .warning { background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>🎬 SamFilms</h1>
+              <p>Recuperación de Contraseña</p>
+            </div>
+            <div class="content">
+              <h2>Hola ${userName},</h2>
+              <p>Hemos recibido una solicitud para restablecer la contraseña de tu cuenta en SamFilms.</p>
+              <p>Haz clic en el siguiente botón para restablecer tu contraseña:</p>
+              
+              <div style="text-align: center;">
+                <a href="${resetUrlString}" class="button">
+                  Restablecer Contraseña
+                </a>
+              </div>
+              
+              <div class="warning">
+                <strong>⚠️ Importante:</strong>
+                <ul>
+                  <li>Este enlace expirará en <strong>1 hora</strong></li>
+                  <li>Solo puedes usarlo <strong>una vez</strong></li>
+                  <li>Si no solicitaste este cambio, ignora este correo</li>
+                </ul>
+              </div>
+              
+              <p style="color: #666; font-size: 14px; margin-top: 20px;">
+                Si el botón no funciona, copia y pega este enlace en tu navegador:
+              </p>
+              <p style="word-break: break-all; background: #fff; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 12px;">
+                ${resetUrlString}
+              </p>
+            </div>
+            <div class="footer">
+              <p>Este es un correo automático, por favor no respondas.</p>
+              <p>&copy; ${new Date().getFullYear()} SamFilms. Todos los derechos reservados.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+      text: `
+Hola ${userName},
 
-  try {
+Hemos recibido una solicitud para restablecer tu contraseña en SamFilms.
+
+Para restablecer tu contraseña, visita el siguiente enlace:
+${resetUrlString}
+
+⚠️ Este enlace expirará en 1 hora y solo puede usarse una vez.
+
+Si no solicitaste este cambio, ignora este correo.
+
+---
+SamFilms - ${new Date().getFullYear()}
+Este es un correo automático, por favor no respondas.
+      `
+    };
+
+    // ✅ ENVIAR EMAIL CON MANEJO DE ERRORES MEJORADO
+    logger.info('EMAIL', `Intentando enviar email a: ${to}`);
+    
     const info = await transporter.sendMail(mailOptions);
-    logger.info('EMAIL', 'Password reset email sent', { to, messageId: info.messageId });
+    
+    logger.success('EMAIL', 'Email enviado exitosamente', { 
+      to, 
+      messageId: info.messageId,
+      response: info.response 
+    });
+    
+    return {
+      success: true,
+      messageId: info.messageId
+    };
+
+  } catch (error) {
+    logger.error('EMAIL', 'Error enviando email de recuperación', {
+      to,
+      error: error.message,
+      code: error.code,
+      command: error.command
+    });
+    
+    // Proporcionar mensajes de error más específicos
+    let errorMessage = 'Error enviando email';
+    
+    if (error.code === 'EAUTH') {
+      errorMessage = 'Error de autenticación. Verifica EMAIL_USER y EMAIL_PASSWORD';
+    } else if (error.code === 'ECONNECTION') {
+      errorMessage = 'No se pudo conectar al servidor de email';
+    } else if (error.code === 'ETIMEDOUT') {
+      errorMessage = 'Timeout al conectar con el servidor de email';
+    }
+    
+    throw new Error(errorMessage);
+  }
+};
+
+/**
+ * Función para probar la configuración de email
+ */
+export const testEmailConfiguration = async () => {
+  try {
+    await transporter.verify();
+    logger.success('EMAIL', 'Configuración de email verificada correctamente');
     return true;
   } catch (error) {
-    logger.error('EMAIL', 'Error sending reset email', { to, error: error?.message || error });
-    // Preserve throwing behavior so controller can decide how to respond
-    throw error;
+    logger.error('EMAIL', 'Error en configuración de email', error);
+    return false;
   }
+};
+
+export default {
+  sendPasswordResetEmail,
+  testEmailConfiguration
 };

@@ -30,3 +30,27 @@ router.put("/:id", authenticateToken, UserController.update);
 router.delete("/:id", authenticateToken, UserController.delete);
 
 export default router;
+
+// En api/routes/userRoutes.js - solo para testing
+if (process.env.NODE_ENV === 'development') {
+  router.post("/test-email", async (req, res) => {
+    try {
+      const { testEmailConfiguration, sendPasswordResetEmail } = await import('../utils/emailService.js');
+      
+      const isConfigValid = await testEmailConfiguration();
+      if (!isConfigValid) {
+        return res.status(500).json({ success: false, message: 'Email config invalid' });
+      }
+      
+      await sendPasswordResetEmail(
+        process.env.EMAIL_USER, // Enviar a ti mismo
+        'test-token-123456',
+        'Test User'
+      );
+      
+      res.json({ success: true, message: 'Test email sent!' });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+}

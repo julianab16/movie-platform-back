@@ -577,74 +577,73 @@ class UserController extends GlobalController {
   }
 
   // POST /users/forgot-password
-  async forgotPassword(req, res) {
-    try {
-      const { correo } = req.body;
+  // En api/controllers/UserController.js - método forgotPassword
+async forgotPassword(req, res) {
+  try {
+    const { correo } = req.body;
 
-      if (!correo) {
-        return res.status(400).json({
-          success: false,
-          message: "Email is required",
-          message_es: "El correo es requerido"
-        });
-      }
-
-      // Buscar usuario por correo
-      const { data: user, error: userError } = await supabase
-        .from('users')
-        .select('id, nombres, correo')
-        .eq('correo', correo.toLowerCase())
-        .single();
-
-      // Siempre retornar éxito para evitar enumeración de usuarios
-      if (userError || !user) {
-        logger.info('USER_CONTROLLER', 'Password reset solicitado para email inexistente', { correo });
-        return res.status(200).json({
-          success: true,
-          message: "If the email exists, a password reset link has been sent",
-          message_es: "Si el correo existe, se ha enviado un enlace de recuperación"
-        });
-      }
-
-      // Generar token seguro
-      const resetToken = crypto.randomBytes(32).toString('hex');
-      const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
-
-      // Eliminar tokens anteriores del usuario
-      await PasswordResetToken.deleteByUserId(user.id);
-
-      // Crear nuevo token
-      await PasswordResetToken.create(user.id, hashedToken, expiresAt);
-
-      // Enviar email
-      try {
-        await sendPasswordResetEmail(user.correo, resetToken, user.nombres || 'Usuario');
-        logger.info('USER_CONTROLLER', 'Email de recuperación enviado', { userId: user.id });
-      } catch (emailError) {
-        logger.error('USER_CONTROLLER', 'Error enviando email', emailError);
-        return res.status(500).json({
-          success: false,
-          message: "Error sending reset email",
-          message_es: "Error al enviar el correo de recuperación"
-        });
-      }
-
-      res.status(200).json({
-        success: true,
-        message: "Password reset email sent successfully",
-        message_es: "Correo de recuperación enviado exitosamente"
-      });
-
-    } catch (error) {
-      logger.error('USER_CONTROLLER', 'Error en forgotPassword', error);
-      res.status(500).json({
+    if (!correo) {
+      return res.status(400).json({
         success: false,
-        message: "Internal server error",
-        message_es: "Error interno del servidor"
+        message: "Email is required",
+        message_es: "El correo es requerido"
       });
     }
+
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id, nombres, correo')
+      .eq('correo', correo.toLowerCase())
+      .single();
+
+    // ✅ Siempre retornar éxito para evitar enumeración de usuarios
+    if (userError || !user) {
+      logger.info('USER_CONTROLLER', 'Password reset solicitado para email inexistente', { correo });
+      // Esperar un tiempo similar al proceso real
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return res.status(200).json({
+        success: true,
+        message: "If the email exists, a password reset link has been sent",
+        message_es: "Si el correo existe, se ha enviado un enlace de recuperación"
+      });
+    }
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+    await PasswordResetToken.deleteByUserId(user.id);
+    await PasswordResetToken.create(user.id, hashedToken, expiresAt);
+
+    try {
+      // ✅ Intentar enviar el email
+      await sendPasswordResetEmail(user.correo, resetToken, user.nombres || 'Usuario');
+      logger.success('USER_CONTROLLER', 'Email de recuperación enviado', { userId: user.id });
+    } catch (emailError) {
+      logger.error('USER_CONTROLLER', 'Error enviando email', emailError);
+      // ❌ NO revelar que el usuario existe, pero loguear el error
+      return res.status(500).json({
+        success: false,
+        message: "Error sending reset email. Please try again later.",
+        message_es: "Error al enviar el correo. Por favor intenta más tarde."
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Password reset email sent successfully",
+      message_es: "Correo de recuperación enviado exitosamente"
+    });
+
+  } catch (error) {
+    logger.error('USER_CONTROLLER', 'Error en forgotPassword', error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      message_es: "Error interno del servidor"
+    });
   }
+}
 
   // POST /users/reset-password
   async resetPassword(req, res) {
