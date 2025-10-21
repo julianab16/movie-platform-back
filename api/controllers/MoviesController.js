@@ -1,9 +1,10 @@
 import GlobalController from './GlobalController.js';
 import MoviesDAO from '../dao/MoviesDAO.js';
 import PexelsDAO from '../dao/PexelsDAO.js';
+import TmdbDAO from '../dao/TmdbDAO.js';
 class MoviesController extends GlobalController {
   constructor() {
-    super(MoviesDAO);
+    super(TmdbDAO);
   }
 
   // Method to get movies by genre
@@ -12,7 +13,7 @@ class MoviesController extends GlobalController {
       const { genero } = req.params;
       if (!genero) return res.status(400).json({ success: false, message: 'Falta el parámetro genero' });
 
-      const movies = await PexelsDAO.getMoviesByGenre(genero); // // this.dao to PexelsDAO
+      const movies = await TmdbDAO.getMoviesByGenre(genero); // // this.dao to PexelsDAO
       res.status(200).json({
         success: true,
         data: movies
@@ -32,7 +33,7 @@ class MoviesController extends GlobalController {
       const { nombre } = req.params;
       if (!nombre) return res.status(400).json({ success: false, message: 'Falta el parámetro nombre' });
 
-      const movies = await PexelsDAO.searchMoviesByName(nombre); // this.dao to PexelsDAO
+      const movies = await TmdbDAO.searchMoviesByName(nombre); // this.dao to PexelsDAO
       res.status(200).json({
         success: true,
         data: movies
