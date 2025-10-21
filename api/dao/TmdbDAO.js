@@ -56,7 +56,7 @@ class TmdbDAO {
   /**
    * 🔹 Leer película por ID (para /:id)
    */
-  async findById(id, language = "es-ES") {
+  async getById(id, language = "es-ES") {
     const { data } = await tmdbClient.get(`/movie/${id}`, {
       params: { language },
     });
