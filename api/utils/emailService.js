@@ -59,7 +59,7 @@ export const sendPasswordResetEmail = async (to, resetToken, userName) => {
     }
 
     // Construir URL de reset
-    const frontendBase = (process.env.FRONTEND_URL || 'https://samfilms-client.vercel.app').replace(/\/$/, '');
+    const frontendBase = (process.env.FRONTEND_URL || 'https://samfilms-client-liard.vercel.app').replace(/\/$/, '');
     let resetUrlString;
     
     try {
