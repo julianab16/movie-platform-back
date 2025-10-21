@@ -32,12 +32,12 @@ export const sendPasswordResetEmail = async (to, resetToken, userName) => {
     let resetUrlString;
     
     try {
-      const url = new URL('/reset-password', frontendBase);
+      const url = new URL('/restablecer-contrasena', frontendBase);
       url.searchParams.set('token', resetToken);
       resetUrlString = url.toString();
     } catch (err) {
       logger.warn('EMAIL', 'Error construyendo URL, usando fallback', err);
-      resetUrlString = `${frontendBase}/reset-password?token=${encodeURIComponent(resetToken)}`;
+      resetUrlString = `${frontendBase}/restablecer-contrasena?token=${encodeURIComponent(resetToken)}`;
     }
 
     // ✅ Configurar mensaje para SendGrid
