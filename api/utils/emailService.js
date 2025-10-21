@@ -1,86 +1,54 @@
-import nodemailer from 'nodemailer';
+// api/utils/emailService.js
+import sgMail from '@sendgrid/mail';
 import logger from './logger.js';
 
-const createTransporter = () => {
-  // Validar variables de entorno requeridas
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
-    logger.error('EMAIL', 'Variables de entorno EMAIL_USER y EMAIL_PASSWORD son requeridas');
-    throw new Error('Email configuration missing');
-  }
+// ✅ Configurar SendGrid
+const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
+const FROM_EMAIL = process.env.EMAIL_FROM || process.env.EMAIL_USER;
 
-  const config = {
-    service: process.env.EMAIL_SERVICE || 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASSWORD
-    },
-    // Configuración adicional para debugging
-    debug: process.env.NODE_ENV === 'development',
-    logger: process.env.NODE_ENV === 'development'
-  };
-
-  // Solo agregar TLS en desarrollo o si está explícitamente habilitado
-  if (process.env.NODE_ENV !== 'production' || process.env.EMAIL_TLS_ALLOW_SELF_SIGNED === 'true') {
-    config.tls = { 
-      rejectUnauthorized: false,
-      minVersion: 'TLSv1.2' // Versión mínima de TLS
-    };
-  }
-
-  try {
-    const transporter = nodemailer.createTransport(config);
-    
-    // ✅ VERIFICAR CONEXIÓN AL INICIAR
-    transporter.verify((error, success) => {
-      if (error) {
-        logger.error('EMAIL', 'Error en configuración de email', error);
-      } else {
-        logger.success('EMAIL', 'Servidor de email listo para enviar mensajes');
-      }
-    });
-
-    return transporter;
-  } catch (error) {
-    logger.error('EMAIL', 'Error creando transporter', error);
-    throw error;
-  }
-};
-
-const transporter = createTransporter();
+if (!SENDGRID_API_KEY) {
+  logger.error('EMAIL', '❌ SENDGRID_API_KEY no configurada');
+} else {
+  sgMail.setApiKey(SENDGRID_API_KEY);
+  logger.success('EMAIL', '✅ SendGrid configurado correctamente');
+}
 
 /**
- * Enviar email de recuperación de contraseña
+ * Enviar email de recuperación de contraseña usando SendGrid
  */
 export const sendPasswordResetEmail = async (to, resetToken, userName) => {
   try {
-    // Validación de entrada
+    // Validación
     if (!to || !resetToken || !userName) {
-      throw new Error('Parámetros faltantes: to, resetToken, userName son requeridos');
+      throw new Error('Parámetros faltantes: to, resetToken, userName');
+    }
+
+    if (!SENDGRID_API_KEY) {
+      throw new Error('SendGrid no está configurado. Agrega SENDGRID_API_KEY a .env');
     }
 
     // Construir URL de reset
-    const frontendBase = (process.env.FRONTEND_URL || 'https://samfilms-client-liard.vercel.app').replace(/\/$/, '');
+    const frontendBase = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
     let resetUrlString;
     
     try {
-      const url = new URL('/restablecer-contrasena', frontendBase);
+      const url = new URL('/reset-password', frontendBase);
       url.searchParams.set('token', resetToken);
       resetUrlString = url.toString();
     } catch (err) {
       logger.warn('EMAIL', 'Error construyendo URL, usando fallback', err);
-      resetUrlString = `${frontendBase}/restablecer-contrasena?token=${encodeURIComponent(resetToken)}`;
+      resetUrlString = `${frontendBase}/reset-password?token=${encodeURIComponent(resetToken)}`;
     }
 
-    // Configurar email
-    const fromAddress = process.env.EMAIL_FROM || process.env.EMAIL_USER;
-    
-    const mailOptions = {
+    // ✅ Configurar mensaje para SendGrid
+    const msg = {
+      to: to,
       from: {
-        name: 'SamFilms - Recuperación de Contraseña',
-        address: fromAddress
+        email: FROM_EMAIL,
+        name: 'SamFilms'
       },
-      to,
       subject: '🔐 Recuperación de Contraseña - SamFilms',
+      text: `Hola ${userName},\n\nPara restablecer tu contraseña, visita el siguiente enlace:\n${resetUrlString}\n\n⚠️ Este enlace expirará en 1 hora y solo puede usarse una vez.\n\nSi no solicitaste este cambio, ignora este correo.\n\n---\nSamFilms - ${new Date().getFullYear()}\nEste es un correo automático, por favor no respondas.`,
       html: `
         <!DOCTYPE html>
         <html>
@@ -88,29 +56,67 @@ export const sendPasswordResetEmail = async (to, resetToken, userName) => {
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
             .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-            .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-            .button { display: inline-block; padding: 15px 30px; background-color: #667eea; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold; margin: 20px 0; }
-            .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; font-size: 14px; }
-            .warning { background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; }
-            .button-restablecer { text-align: center; margin: 0; padding: 0; }
-            .button-restablecer .button { display:inline-block; padding:15px 28px; background:#667eea; color:#ffffff !important; text-decoration:none !important; border-radius:5px; font-weight:bold; }
+            .header { 
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+              color: white; 
+              padding: 30px; 
+              text-align: center; 
+              border-radius: 10px 10px 0 0; 
+            }
+            .content { 
+              background: #f9f9f9; 
+              padding: 30px; 
+              border-radius: 0 0 10px 10px; 
+            }
+            .button { 
+              display: inline-block; 
+              padding: 15px 30px; 
+              background-color: #667eea; 
+              color: white !important; 
+              text-decoration: none; 
+              border-radius: 5px; 
+              font-weight: bold; 
+              margin: 20px 0; 
+            }
+            .footer { 
+              text-align: center; 
+              margin-top: 30px; 
+              padding-top: 20px; 
+              border-top: 1px solid #ddd; 
+              color: #666; 
+              font-size: 14px; 
+            }
+            .warning { 
+              background: #fff3cd; 
+              border-left: 4px solid #ffc107; 
+              padding: 15px; 
+              margin: 20px 0; 
+            }
+            .code-box {
+              background: #fff;
+              padding: 10px;
+              border: 1px solid #ddd;
+              border-radius: 5px;
+              font-size: 12px;
+              word-break: break-all;
+              color: #333;
+            }
           </style>
         </head>
         <body>
           <div class="container">
             <div class="header">
-              <h1>🎬 SamFilms</h1>
-              <p>Recuperación de Contraseña</p>
+              <h1 style="margin: 0;">🎬 SamFilms</h1>
+              <p style="margin: 10px 0 0 0;">Recuperación de Contraseña</p>
             </div>
             <div class="content">
-              <h2>Hola ${userName},</h2>
+              <h2 style="color: #333;">Hola ${userName},</h2>
               <p>Hemos recibido una solicitud para restablecer la contraseña de tu cuenta en SamFilms.</p>
               <p>Haz clic en el siguiente botón para restablecer tu contraseña:</p>
               
-              <div class="button-restablecer" style="text-align: center;">
+              <div style="text-align: center;">
                 <a href="${resetUrlString}" class="button">
                   Restablecer Contraseña
                 </a>
@@ -118,7 +124,7 @@ export const sendPasswordResetEmail = async (to, resetToken, userName) => {
               
               <div class="warning">
                 <strong>⚠️ Importante:</strong>
-                <ul>
+                <ul style="margin: 10px 0; padding-left: 20px;">
                   <li>Este enlace expirará en <strong>1 hora</strong></li>
                   <li>Solo puedes usarlo <strong>una vez</strong></li>
                   <li>Si no solicitaste este cambio, ignora este correo</li>
@@ -128,85 +134,73 @@ export const sendPasswordResetEmail = async (to, resetToken, userName) => {
               <p style="color: #666; font-size: 14px; margin-top: 20px;">
                 Si el botón no funciona, copia y pega este enlace en tu navegador:
               </p>
-              <p style="word-break: break-all; background: #fff; padding: 10px; border: 1px solid #ddd; border-radius: 5px; font-size: 12px;">
+              <div class="code-box">
                 ${resetUrlString}
-              </p>
+              </div>
             </div>
             <div class="footer">
-              <p>Este es un correo automático, por favor no respondas.</p>
-              <p>&copy; ${new Date().getFullYear()} SamFilms. Todos los derechos reservados.</p>
+              <p style="margin: 5px 0;">Este es un correo automático, por favor no respondas.</p>
+              <p style="margin: 5px 0;">&copy; ${new Date().getFullYear()} SamFilms. Todos los derechos reservados.</p>
             </div>
           </div>
         </body>
         </html>
-      `,
-      text: `
-Hola ${userName},
-
-Hemos recibido una solicitud para restablecer tu contraseña en SamFilms.
-
-Para restablecer tu contraseña, visita el siguiente enlace:
-${resetUrlString}
-
-⚠️ Este enlace expirará en 1 hora y solo puede usarse una vez.
-
-Si no solicitaste este cambio, ignora este correo.
-
----
-SamFilms - ${new Date().getFullYear()}
-Este es un correo automático, por favor no respondas.
       `
     };
 
-    // ✅ ENVIAR EMAIL CON MANEJO DE ERRORES MEJORADO
-    logger.info('EMAIL', `Intentando enviar email a: ${to}`);
-    
-    const info = await transporter.sendMail(mailOptions);
-    
-    logger.success('EMAIL', 'Email enviado exitosamente', { 
-      to, 
-      messageId: info.messageId,
-      response: info.response 
+    logger.info('EMAIL', `📤 Enviando email a: ${to} via SendGrid`);
+
+    // ✅ Enviar con SendGrid
+    const response = await sgMail.send(msg);
+
+    logger.success('EMAIL', '✅ Email enviado exitosamente via SendGrid', {
+      to,
+      statusCode: response[0].statusCode,
+      messageId: response[0].headers['x-message-id']
     });
-    
+
     return {
       success: true,
-      messageId: info.messageId
+      messageId: response[0].headers['x-message-id'],
+      provider: 'SendGrid'
     };
 
   } catch (error) {
-    logger.error('EMAIL', 'Error enviando email de recuperación', {
+    logger.error('EMAIL', '❌ Error enviando email con SendGrid', {
       to,
       error: error.message,
       code: error.code,
-      command: error.command
+      response: error.response?.body
     });
-    
-    // Proporcionar mensajes de error más específicos
+
     let errorMessage = 'Error enviando email';
-    
-    if (error.code === 'EAUTH') {
-      errorMessage = 'Error de autenticación. Verifica EMAIL_USER y EMAIL_PASSWORD';
-    } else if (error.code === 'ECONNECTION') {
-      errorMessage = 'No se pudo conectar al servidor de email';
-    } else if (error.code === 'ETIMEDOUT') {
-      errorMessage = 'Timeout al conectar con el servidor de email';
+
+    if (error.code === 401 || error.code === 403) {
+      errorMessage = 'Error de autenticación con SendGrid. Verifica SENDGRID_API_KEY';
+    } else if (error.code === 413) {
+      errorMessage = 'Email demasiado grande';
+    } else if (error.response?.body?.errors) {
+      errorMessage = error.response.body.errors[0]?.message || errorMessage;
     }
-    
+
     throw new Error(errorMessage);
   }
 };
 
 /**
- * Función para probar la configuración de email
+ * Función para probar la configuración de SendGrid
  */
 export const testEmailConfiguration = async () => {
   try {
-    await transporter.verify();
-    logger.success('EMAIL', 'Configuración de email verificada correctamente');
+    if (!SENDGRID_API_KEY) {
+      logger.error('EMAIL', '❌ SENDGRID_API_KEY no configurada');
+      return false;
+    }
+
+    logger.success('EMAIL', '✅ Configuración de SendGrid verificada');
     return true;
   } catch (error) {
-    logger.error('EMAIL', 'Error en configuración de email', error);
+    logger.error('EMAIL', '❌ Error en configuración de SendGrid', error);
     return false;
   }
 };
