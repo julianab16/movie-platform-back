@@ -63,12 +63,12 @@ export const sendPasswordResetEmail = async (to, resetToken, userName) => {
     let resetUrlString;
     
     try {
-      const url = new URL('/reset-password', frontendBase);
+      const url = new URL('/restablecer-contrasena', frontendBase);
       url.searchParams.set('token', resetToken);
       resetUrlString = url.toString();
     } catch (err) {
       logger.warn('EMAIL', 'Error construyendo URL, usando fallback', err);
-      resetUrlString = `${frontendBase}/reset-password?token=${encodeURIComponent(resetToken)}`;
+      resetUrlString = `${frontendBase}/restablecer-contrasena?token=${encodeURIComponent(resetToken)}`;
     }
 
     // Configurar email
@@ -92,9 +92,11 @@ export const sendPasswordResetEmail = async (to, resetToken, userName) => {
             .container { max-width: 600px; margin: 0 auto; padding: 20px; }
             .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
             .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-            .button { display: inline-block; padding: 15px 30px; background-color: #667eea; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; margin: 20px 0; }
+            .button { display: inline-block; padding: 15px 30px; background-color: #667eea; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold; margin: 20px 0; }
             .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; font-size: 14px; }
             .warning { background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; }
+            .button-restablecer { text-align: center; margin: 0; padding: 0; }
+            .button-restablecer .button { display:inline-block; padding:15px 28px; background:#667eea; color:#ffffff !important; text-decoration:none !important; border-radius:5px; font-weight:bold; }
           </style>
         </head>
         <body>
@@ -108,7 +110,7 @@ export const sendPasswordResetEmail = async (to, resetToken, userName) => {
               <p>Hemos recibido una solicitud para restablecer la contraseña de tu cuenta en SamFilms.</p>
               <p>Haz clic en el siguiente botón para restablecer tu contraseña:</p>
               
-              <div style="text-align: center;">
+              <div class="button-restablecer" style="text-align: center;">
                 <a href="${resetUrlString}" class="button">
                   Restablecer Contraseña
                 </a>
