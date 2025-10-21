@@ -4,7 +4,7 @@ import PexelsDAO from '../dao/PexelsDAO.js';
 import TmdbDAO from '../dao/TmdbDAO.js';
 class MoviesController extends GlobalController {
   constructor() {
-    super(MoviesDAO);
+    super(TmdbDAO);
   }
 
   // Method to get movies by genre
