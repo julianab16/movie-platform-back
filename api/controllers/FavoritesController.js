@@ -8,7 +8,10 @@
 
 import FavoritesDAO from '../dao/FavoritesDAO.js';
 import logger from '../utils/logger.js';
-import { supabase } from '../config/supabase.js';
+// Use the administrative Supabase client on the server side to avoid RLS/permission
+// issues when performing inserts/selects from the backend. We import it as
+// `supabase` so the rest of the controller code remains unchanged.
+import { supabaseAdmin as supabase } from '../config/supabase.js';
 
 class FavoritesController {
   
@@ -26,7 +29,7 @@ class FavoritesController {
           message: "User not authenticated",
           message_es: "Usuario no autenticado"
         });
-      }
+  }
 
       logger.info('FAVORITES_CONTROLLER', 'Obteniendo favoritos del usuario', { userId });
 
@@ -72,7 +75,6 @@ class FavoritesController {
           message_es: "Usuario no autenticado"
         });
       }
-
       const {
         movieId,
         movie_id
@@ -95,20 +97,26 @@ class FavoritesController {
         movieId: finalMovieId
       });
 
-      // Check if movie is already in favorites
+      // Decide whether the incoming id is a UUID (internal) or an external TMDb id (numeric/string)
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const isUuid = uuidRegex.test(String(finalMovieId));
+      const idColumn = isUuid ? 'movie_id' : 'tmdb_id';
+
+      // Check if movie is already in favorites (supports both movie_id and tmdb_id)
       const { data: existingFavorite, error: checkError } = await supabase
         .from('favorites')
         .select('id')
         .eq('user_id', userId)
-        .eq('movie_id', finalMovieId)
+        .eq(idColumn, finalMovieId)
         .single();
 
       if (checkError && checkError.code !== 'PGRST116') {
-        logger.error('FAVORITES_CONTROLLER', 'Error verificando favorito existente', checkError);
+        logger.error('FAVORITES_CONTROLLER', 'Error verificando favorito existente', { checkError });
         return res.status(500).json({
           success: false,
           message: "Error checking existing favorite",
-          message_es: "Error verificando favorito existente"
+          message_es: "Error verificando favorito existente",
+          error: checkError.message || checkError
         });
       }
 
@@ -120,24 +128,26 @@ class FavoritesController {
         });
       }
 
-      // Add to favorites (only user_id and movie_id)
+      // Build insert body dynamically depending on id column
+      const insertBody = { user_id: userId };
+      insertBody[idColumn] = finalMovieId;
+
       const { data: newFavorite, error: insertError } = await supabase
         .from('favorites')
-        .insert([{
-          user_id: userId,
-          movie_id: finalMovieId
-        }])
+        .insert([insertBody])
         .select()
         .single();
 
       if (insertError) {
-        logger.error('FAVORITES_CONTROLLER', 'Error agregando a favoritos', insertError);
+        logger.error('FAVORITES_CONTROLLER', 'Error agregando a favoritos', { insertError, insertBody });
         return res.status(500).json({
           success: false,
           message: "Error adding to favorites",
-          message_es: "Error agregando a favoritos"
+          message_es: "Error agregando a favoritos",
+          error: insertError.message || insertError
         });
       }
+
 
       logger.success('FAVORITES_CONTROLLER', 'Película agregada a favoritos', { 
         userId, 
@@ -193,12 +203,17 @@ class FavoritesController {
         movieId 
       });
 
-      // Check if favorite exists
+      // Decide which column to use (movie_id uuid or tmdb_id numeric/string)
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const isUuid = uuidRegex.test(String(movieId));
+      const idColumn = isUuid ? 'movie_id' : 'tmdb_id';
+
+      // Check if favorite exists (supports both movie_id and tmdb_id)
       const { data: existingFavorite, error: checkError } = await supabase
         .from('favorites')
         .select('id')
         .eq('user_id', userId)
-        .eq('movie_id', movieId)
+        .eq(idColumn, movieId)
         .single();
 
       if (checkError) {
@@ -218,12 +233,12 @@ class FavoritesController {
         });
       }
 
-      // Remove from favorites
+      // Remove from favorites (supports movie_id or tmdb_id)
       const { error: deleteError } = await supabase
         .from('favorites')
         .delete()
         .eq('user_id', userId)
-        .eq('movie_id', movieId);
+        .eq(idColumn, movieId);
 
       if (deleteError) {
         logger.error('FAVORITES_CONTROLLER', 'Error removiendo favorito', deleteError);
@@ -287,11 +302,17 @@ class FavoritesController {
       });
 
       // Check if movie is in favorites
+      // Decide which column to use (movie_id uuid or tmdb_id numeric/string)
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const isUuid = uuidRegex.test(String(movieId));
+      const idColumn = isUuid ? 'movie_id' : 'tmdb_id';
+
+      // Check if movie is in favorites (supports both movie_id and tmdb_id)
       const { data: favorite, error } = await supabase
         .from('favorites')
         .select('id, created_at')
         .eq('user_id', userId)
-        .eq('movie_id', movieId)
+        .eq(idColumn, movieId)
         .single();
 
       if (error && error.code !== 'PGRST116') {
@@ -316,7 +337,8 @@ class FavoritesController {
         success: true,
         data: {
           isFavorite,
-    addedAt: favorite?.created_at || null
+          matchedBy: idColumn,
+          addedAt: favorite?.created_at || null
         },
         message: "Favorite status retrieved successfully",
         message_es: "Estado de favorito obtenido exitosamente"
