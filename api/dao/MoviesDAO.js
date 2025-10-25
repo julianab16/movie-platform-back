@@ -22,6 +22,23 @@ class MoviesDAO extends GlobalDAO {
     if (error) throw error;
     return data;
   }
+
+  // Get movie by external TMDb id
+  async getByTmdbId(tmdbId) {
+    try {
+      const { data, error } = await supabase
+        .from(this.tableName)
+        .select('*')
+        .eq('tmdb_id', tmdbId)
+        .single();
+
+      if (error) return null;
+      return data;
+    } catch (error) {
+      console.error('Error fetching movie by tmdb_id:', error);
+      throw error;
+    }
+  }
 }
 
 export default new MoviesDAO();
