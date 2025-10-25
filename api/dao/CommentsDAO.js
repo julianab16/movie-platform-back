@@ -9,29 +9,37 @@ class CommentsDAO extends GlobalDAO {
   // Get comments by movie ID with user information
   async getByMovieId(movieId) {
     try {
-      const { data, error } = await supabase
-        .from('comments')
-        .select(`
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const isUuid = uuidRegex.test(String(movieId));
+      // Select only the fields the frontend needs and include the user object
+      const baseSelect = `
+        id,
+        contenido,
+        usuario_id,
+        created_at,
+        updated_at,
+        editado,
+        users!usuario_id (
           id,
-          contenido,
-          fecha_comentario,
-          created_at,
-          updated_at,
-          users!usuario_id (
-            id,
-            nombres,
-            apellidos
-          ),
-          movies!pelicula_id (
-            id,
-            nombre
-          )
-        `)
-        .eq('pelicula_id', movieId)
-        .order('fecha_comentario', { ascending: false });
+          nombres,
+          apellidos
+        )
+      `;
 
+      let query = supabase
+        .from('comments')
+        .select(baseSelect)
+        .order('created_at', { ascending: false });
+
+      if (isUuid) {
+        query = query.eq('pelicula_id', movieId);
+      } else {
+        query = query.eq('tmdb_id', Number(movieId));
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
-      return data;
+      return data || [];
     } catch (error) {
       console.error('Error fetching comments by movie:', error);
       throw error;
@@ -87,9 +95,10 @@ class CommentsDAO extends GlobalDAO {
         .select(`
           id,
           contenido,
-          fecha_comentario,
+          usuario_id,
           created_at,
           updated_at,
+          editado,
           users!usuario_id (
             id,
             nombres,

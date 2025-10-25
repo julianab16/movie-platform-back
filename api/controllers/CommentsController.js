@@ -7,13 +7,15 @@ class CommentsController {
   // Create a new comment
   async createComment(req, res) {
     try {
-      const { usuario_id, pelicula_id, contenido } = req.body;
+      // Prefer usuario from authenticated token, fallback to body
+      const usuario_id = req.user?.id || req.body.usuario_id;
+      const { pelicula_id, tmdb_id, contenido } = req.body;
 
-      // Validate required fields
-      if (!usuario_id || !pelicula_id || !contenido) {
+      // Validate required fields: must have usuario and either pelicula_id or tmdb_id
+      if (!usuario_id || (!pelicula_id && !tmdb_id) || !contenido) {
         return res.status(400).json({
           success: false,
-          message: 'Missing required fields: usuario_id, pelicula_id, contenido'
+          message: 'Missing required fields: usuario_id, (pelicula_id or tmdb_id), contenido'
         });
       }
 
@@ -41,28 +43,45 @@ class CommentsController {
         });
       }
 
-      // Verify movie exists
-      const movie = await MoviesDAO.getById(pelicula_id);
-      if (!movie) {
-        return res.status(404).json({
-          success: false,
-          message: 'Movie not found'
-        });
-      }
+
+      // Decide which movie identifier to use: UUID (pelicula_id) or external tmdb_id
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const numericRegex = /^[0-9]+$/;
 
       const commentData = {
         usuario_id,
-        pelicula_id,
         contenido: contenido.trim()
       };
 
+      // If we received an internal UUID, verify the movie exists and use it
+      if (pelicula_id && uuidRegex.test(String(pelicula_id))) {
+        const movie = await MoviesDAO.getById(pelicula_id);
+        if (!movie) {
+          return res.status(404).json({ success: false, message: 'Movie not found' });
+        }
+        commentData.pelicula_id = pelicula_id;
+      } else {
+        // If pelicula_id is numeric (frontend sometimes sends TMDb id in pelicula_id) prefer tmdb id
+        const tmdbToUse = (numericRegex.test(String(pelicula_id)) ? Number(pelicula_id) : (tmdb_id ? Number(tmdb_id) : null));
+        if (!tmdbToUse) {
+          return res.status(400).json({ success: false, message: 'Missing pelicula_id or tmdb_id' });
+        }
+
+        // Try to resolve TMDb id to internal movie UUID
+        const movie = await MoviesDAO.getByTmdbId(tmdbToUse);
+        if (!movie) {
+          // Minimal approach: if movie not found, return 400 so frontend or migration can decide to register movie first
+          return res.status(400).json({ success: false, message: `Movie with tmdb_id ${tmdbToUse} is not registered` });
+        }
+        commentData.pelicula_id = movie.id;
+      }
+
       const newComment = await CommentsDAO.create(commentData);
 
-      res.status(201).json({
-        success: true,
-        message: 'Comment created successfully',
-        data: newComment
-      });
+      // Return the comment with user details
+      const created = await CommentsDAO.getByIdWithDetails(newComment.id);
+
+      res.status(201).json({ success: true, data: created });
 
     } catch (error) {
       console.error('Error creating comment:', error);
@@ -135,22 +154,10 @@ class CommentsController {
     try {
       const { movieId } = req.params;
 
-      // Verify movie exists
-      const movie = await MoviesDAO.getById(movieId);
-      if (!movie) {
-        return res.status(404).json({
-          success: false,
-          message: 'Movie not found'
-        });
-      }
-
+      // CommentsDAO knows how to handle either internal UUID (pelicula_id) or numeric TMDb id (tmdb_id)
       const comments = await CommentsDAO.getByMovieId(movieId);
 
-      res.status(200).json({
-        success: true,
-        message: 'Comments retrieved successfully',
-        data: comments
-      });
+      return res.status(200).json({ success: true, data: comments || [] });
 
     } catch (error) {
       console.error('Error fetching comments by movie:', error);
@@ -231,27 +238,31 @@ class CommentsController {
         });
       }
 
-      // Check if user is the owner of the comment (if usuario_id is provided)
-      if (usuario_id) {
-        const isOwner = await CommentsDAO.isCommentOwner(id, usuario_id);
-        if (!isOwner) {
-          return res.status(403).json({
-            success: false,
-            message: 'You can only edit your own comments'
-          });
-        }
+      // Only the owner (from token or provided usuario_id) can edit
+      const editorId = req.user?.id || usuario_id;
+      const isOwner = await CommentsDAO.isCommentOwner(id, editorId);
+      if (!isOwner) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only edit your own comments'
+        });
       }
 
       const updateData = {
         contenido: contenido.trim()
       };
 
+      // mark as edited
+      updateData.editado = true;
+
       const updatedComment = await CommentsDAO.update(id, updateData);
+
+      const updatedWithDetails = await CommentsDAO.getByIdWithDetails(id);
 
       res.status(200).json({
         success: true,
         message: 'Comment updated successfully',
-        data: updatedComment
+        data: updatedWithDetails
       });
 
     } catch (error) {
@@ -268,34 +279,24 @@ class CommentsController {
   async deleteComment(req, res) {
     try {
       const { id } = req.params;
-      const { usuario_id } = req.body;
+      // Prefer authenticated user id
+      const actorId = req.user?.id || req.body?.usuario_id;
 
       // Check if comment exists
       const existingComment = await CommentsDAO.getById(id);
       if (!existingComment) {
-        return res.status(404).json({
-          success: false,
-          message: 'Comment not found'
-        });
+        return res.status(404).json({ success: false, message: 'Comment not found' });
       }
 
-      // Check if user is the owner of the comment (if usuario_id is provided)
-      if (usuario_id) {
-        const isOwner = await CommentsDAO.isCommentOwner(id, usuario_id);
-        if (!isOwner) {
-          return res.status(403).json({
-            success: false,
-            message: 'You can only delete your own comments'
-          });
-        }
+      // Verify ownership: only the comment owner can delete
+      const isOwner = await CommentsDAO.isCommentOwner(id, actorId);
+      if (!isOwner) {
+        return res.status(403).json({ success: false, message: 'You can only delete your own comments' });
       }
 
-      await CommentsDAO.delete(id);
+      const deleted = await CommentsDAO.delete(id);
 
-      res.status(200).json({
-        success: true,
-        message: 'Comment deleted successfully'
-      });
+      res.status(200).json({ success: true, message: 'Comment deleted successfully', data: deleted });
 
     } catch (error) {
       console.error('Error deleting comment:', error);
