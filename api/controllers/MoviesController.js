@@ -46,6 +46,22 @@ class MoviesController extends GlobalController {
       });
     }
   };
+  getMovieTrailer = async (req, res) => {
+    try {
+      const { movieId } = req.params;
+      if (!movieId) return res.status(400).json({ success: false, message: 'Falta el parámetro movieId' });
+      const trailer = await PexelsDAO.getMovieTrailer(movieId);
+      res.status(200).json({
+        success: true,
+        data: trailer
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: 'Error al obtener el tráiler de la película',
+        error: error.message
+      });
+    }
+  };
 }
-
 export default new MoviesController();
