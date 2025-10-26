@@ -6,5 +6,6 @@ export const tmdbClient = axios.create({
   headers: {
     Authorization: `Bearer ${process.env.TMDB_API_KEY}`,
     'Content-Type': 'application/json;charset=utf-8',
+
   },
 });
