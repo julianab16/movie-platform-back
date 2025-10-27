@@ -69,7 +69,7 @@ class MoviesController extends GlobalController {
     if (!trailerResult.success || !trailerResult.videoUrl) {
       return res.status(404).json({
         success: false,
-        message: "No se encontró tráiler relacionado en Pexels",
+        message: "No se encontró video relacionado en Pexels",
       });
     }
     // 🔹 OK
@@ -81,7 +81,7 @@ class MoviesController extends GlobalController {
     console.error("Error al obtener el tráiler:", error.message);
     res.status(500).json({
       success: false,
-      message: "Error al obtener el tráiler de la película",
+      message: "Error al obtener video para la película",
       error: error.message,
     });
   }
