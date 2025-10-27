@@ -10,6 +10,7 @@ router.get("/", (req, res) => MoviesController.getAll(req, res));
 // Specific routes MUST come before generic /:id route
 router.get("/genero/:genero", (req, res) => MoviesController.getByGenero(req, res));
 router.get("/search/:nombre", (req, res) => MoviesController.searchByNombre(req, res));
+router.get("/:id/trailer", (req, res) => MoviesController.getMovieTrailer(req, res));
 
 // Generic ID route comes after specific routes
 router.get("/:id", (req, res) => MoviesController.read(req, res));
