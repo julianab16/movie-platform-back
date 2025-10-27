@@ -47,21 +47,45 @@ class MoviesController extends GlobalController {
     }
   };
   getMovieTrailer = async (req, res) => {
-    try {
-      const { movieId } = req.params;
-      if (!movieId) return res.status(400).json({ success: false, message: 'Falta el parámetro movieId' });
-      const trailer = await PexelsDAO.getMovieTrailer(movieId);
-      res.status(200).json({
-        success: true,
-        data: trailer
-      });
-    } catch (error) {
-      res.status(500).json({
+  try {
+    const { id:movieId } = req.params;
+
+    if (!movieId) {
+      return res.status(400).json({
         success: false,
-        message: 'Error al obtener el tráiler de la película',
-        error: error.message
+        message: "Falta el parámetro movieId",
       });
     }
-  };
+
+    // 🔹 Paso 1: obtener nombre desde TMDb
+    const movieData = await TmdbDAO.getById(movieId);
+    if (!movieData || !movieData.nombre) {
+      throw new Error("No se pudo obtener la película desde TMDb");
+    }
+
+    // 🔹 Paso 2: buscar video en Pexels con ese nombre
+   const trailerResult = await PexelsDAO.getMovieTrailer(movieData.title);
+
+    if (!trailerResult.success || !trailerResult.videoUrl) {
+      return res.status(404).json({
+        success: false,
+        message: "No se encontró tráiler relacionado en Pexels",
+      });
+    }
+    // 🔹 OK
+    return res.status(200).json({
+      success: true,
+      data: trailerResult.videoUrl,
+    });
+  } catch (error) {
+    console.error("Error al obtener el tráiler:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Error al obtener el tráiler de la película",
+      error: error.message,
+    });
+  }
+};
+
 }
 export default new MoviesController();
