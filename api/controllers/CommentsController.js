@@ -1,6 +1,8 @@
 import CommentsDAO from '../dao/CommentsDAO.js';
 import UserDAO from '../dao/UserDAO.js';
 import MoviesDAO from '../dao/MoviesDAO.js';
+import TmdbDAO from '../dao/TmdbDAO.js';
+import { supabaseAdmin } from '../config/supabase.js';
 
 class CommentsController {
   
@@ -68,12 +70,53 @@ class CommentsController {
         }
 
         // Try to resolve TMDb id to internal movie UUID
-        const movie = await MoviesDAO.getByTmdbId(tmdbToUse);
+        let movie = await MoviesDAO.getByTmdbId(tmdbToUse);
         if (!movie) {
-          // Minimal approach: if movie not found, return 400 so frontend or migration can decide to register movie first
-          return res.status(400).json({ success: false, message: `Movie with tmdb_id ${tmdbToUse} is not registered` });
+          // If movie not found, attempt to fetch from TMDb and create it in the DB automatically
+          try {
+            const tmdbMovie = await TmdbDAO.getById(tmdbToUse);
+            if (tmdbMovie && (tmdbMovie.nombre || tmdbMovie.title)) {
+              // Map TMDb fields into our movies table structure. TmdbDAO already maps many fields.
+              const moviePayload = {
+                tmdb_id: tmdbToUse,
+                nombre: tmdbMovie.nombre || tmdbMovie.title,
+                sinopsis: tmdbMovie.sinopsis || tmdbMovie.overview || null,
+                fecha_lanzamiento: tmdbMovie.fecha_lanzamiento || tmdbMovie.release_date || null,
+                calificacion: tmdbMovie.calificacion || tmdbMovie.vote_average || null,
+                imagen_url: tmdbMovie.imagen_url || null,
+                genero_ids: tmdbMovie.genero_ids || tmdbMovie.genre_ids || null
+              };
+
+              // Create the movie in our DB using the admin client (server-side)
+              try {
+                const { data: insertedMovie, error: insertError } = await supabaseAdmin
+                  .from('movies')
+                  .insert([moviePayload])
+                  .select()
+                  .single();
+
+                if (insertError) {
+                  console.error('Error inserting movie via supabaseAdmin:', insertError);
+                } else {
+                  movie = insertedMovie;
+                }
+              } catch (dbErr) {
+                console.error('Exception inserting movie via supabaseAdmin:', dbErr);
+              }
+            }
+          } catch (err) {
+            console.error('Error fetching/creating movie from TMDb:', err.message || err);
+            // fallthrough to error response below
+          }
         }
-        commentData.pelicula_id = movie.id;
+
+        if (!movie) {
+          // Still not found / could not create. FALLBACK: store the comment referencing tmdb_id directly
+          console.warn(`Movie with tmdb_id ${tmdbToUse} not found and couldn't be created. Falling back to storing tmdb_id on comment.`);
+          commentData.tmdb_id = tmdbToUse;
+        } else {
+          commentData.pelicula_id = movie.id;
+        }
       }
 
       const newComment = await CommentsDAO.create(commentData);
