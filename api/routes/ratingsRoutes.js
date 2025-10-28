@@ -16,4 +16,7 @@ router.get('/pelicula/:id/average', RatingsController.getAverageByPelicula);
 // Get user's rating for a movie (protected)
 router.get('/user', authenticateToken, RatingsController.getUserRating);
 
+// Delete a user's rating for a movie (protected)
+router.delete('/', authenticateToken, RatingsController.deleteRating);
+
 export default router;
