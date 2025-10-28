@@ -112,6 +112,35 @@ class RatingsDAO extends GlobalDAO {
       return null;
     }
   }
+
+  // Delete a user's rating by usuario_id and pelicula_id or tmdb_id
+  async deleteUserRating({ usuario_id, pelicula_id = null, tmdb_id = null }) {
+    if (!usuario_id) throw new Error('usuario_id requerido');
+    if (!pelicula_id && !tmdb_id) throw new Error('pelicula_id o tmdb_id requerido');
+
+    try {
+      let query = supabaseAdmin.from(this.tableName).select('*').eq('usuario_id', usuario_id);
+      if (pelicula_id) query = query.eq('pelicula_id', pelicula_id);
+      if (tmdb_id) query = query.eq('tmdb_id', tmdb_id);
+      const { data: existing, error: selErr } = await query.single();
+      if (selErr && selErr.code === 'PGRST116') return null; // not found
+      if (selErr) throw selErr;
+
+      // delete by id
+      const { data: deleted, error: delErr } = await supabaseAdmin
+        .from(this.tableName)
+        .delete()
+        .eq('id', existing.id)
+        .select()
+        .single();
+
+      if (delErr) throw delErr;
+      return deleted;
+    } catch (err) {
+      // bubble up
+      throw err;
+    }
+  }
 }
 
 export default new RatingsDAO();
